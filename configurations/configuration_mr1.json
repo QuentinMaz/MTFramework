@@ -1,0 +1,18 @@
+{
+    "command": "./planners/mutated_planner.exe forward a_star_mutant1 h_diff",
+    "domain": "test/gripper/domain.pddl",
+    "problem": "test/gripper/gripper1.pddl",
+    "result" : "configuration_mr1.csv",
+    "metamorphic_relation": "mr1",
+    "number_of_tests": 15,
+    "run_all_tests": false,
+    "generators": [
+        {
+            "name": "generator3"
+        }
+    ],
+    "heuristic":
+    {
+        "name": "h_zero"
+    }
+}

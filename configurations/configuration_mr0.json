@@ -1,0 +1,18 @@
+{
+    "command": "./planners/mutated_planner.exe forward a_star_mutant1 h_diff",
+    "domain": "test/blocks/domain.pddl",
+    "problem": "test/blocks/blocks2.pddl",
+    "result" : "configuration_mr0.csv",
+    "metamorphic_relation": "mr0",
+    "number_of_tests": 15,
+    "run_all_tests": true,
+    "generators": [
+        {
+            "name": "generator1"
+        }
+    ],
+    "heuristic":
+    {
+        "name": "h_zero"
+    }
+}
