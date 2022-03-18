@@ -45,7 +45,7 @@ At this point, a proper executable file *main.exe* should have been created.
 MorphinPlan outputs its result in a .csv file. We provide a Python script, *results_maker.py*, that handles the execution of all the experiments. Simply run the script with `python results_maker.py`. All the subfiles are written in the *data* directory. At the end of the script, they are regrouped into a single file *results.csv* (directly in the directory of this repository).
 
 ## Mining of the raw data
-The exploitation of the raw results are proceeded by the script *results_miner.py*, which can be launched with `python results_miner.py`. It reads *results.csv* and ouputs the following files:
+The exploitation of the raw results are proceeded by the script *results_miner.py*, which can be launched with `python results_miner.py`. It reads *results.csv* and outputs the following files:
 - *mutation_scores.csv*, the results used in RQ1.
 - *generators_scores.csv*, the results related to RQ2.1.
 - *heuristics_chart.png*, the bars chart for RQ2.2. 
