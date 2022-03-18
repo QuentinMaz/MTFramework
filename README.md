@@ -52,3 +52,6 @@ The exploitation of the raw results are proceeded by the script *results_miner.p
 - *non_optimal_detection.csv*, the results for RQ3.
 
 They may not present the results in the same manner as done in the MorphinPlan's paper. In any case, they are easily readable.
+
+## Link to data actually used in the paper
+If, for whatever reason, the experiments can't be reproduced, the aforementioned files can be freely accessed [here](https://doi.org/10.5281/zenodo.6368009).
