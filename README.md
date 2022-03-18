@@ -39,7 +39,7 @@ spldgen_s_14540_1647527992_prolog_rtable.c
    Creating library main.lib and object main.exp
 Created "main.exe"
 ```
-At this point, a proper executable file *main.exe* should be created.
+At this point, a proper executable file *main.exe* should have been created.
 
 ## Execution of the experiments
 MorphinPlan outputs its result in a .csv file. We provide a Python script, *results_maker.py*, that handles the execution of all the experiments. Simply run the script with `python results_maker.py`. All the subfiles are written in the *data* directory. At the end of the script, they are regrouped into a single file *results.csv* (directly in the directory of this repository).
