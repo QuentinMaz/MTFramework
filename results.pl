@@ -8,11 +8,12 @@
 %% RESULT PREDICATES
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% result(+Node, +Generator, +Failure, +Error, +ExecutionTime, +ResultCost).
-result(_Node, _Generator, _Failure, _Error, _ExecutionTime, _ResultCost).
+%% result(+Node, +Failure, +Error, +ExecutionTime, +ResultCost).
+result(_Node, _Failure, _Error, _ExecutionTime, _ResultCost).
 
 %% result_values(+Result, -Values).
-result_values(result(node(State, Cost, Heuristic), Generator, Failure, Error, ExecutionTime, ResultCost), [State, Generator, Cost, Heuristic, Failure, Error, ExecutionTime, ResultCost]).
+result_values(result(node(State, Cost, HeuristicName, HeuristicValue), Failure, Error, ExecutionTime, ResultCost), ResultValues) :-
+    ResultValues = [State, Cost, HeuristicName, HeuristicValue, Failure, Error, ExecutionTime, ResultCost].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% WRITE HELPER PREDICATES
@@ -24,14 +25,14 @@ write_csv_header(CsvFileStream, Domain, Problem, Configuration, SourceResultCost
     problem_name(Problem, ProblemName),
     configuration_metamorphic_relation(Configuration, MetamorphicRelation),
     configuration_nb_tests(Configuration, NumberOfTests),
-    configuration_heuristic(Configuration, Heuristic),
-    configuration_generators(Configuration, GeneratorsPredicates),
-    append([DomainName, ProblemName, SourceResultCost, MetamorphicRelation, NumberOfTests, Heuristic], GeneratorsPredicates, CsvHeader),
+    configuration_heuristics(Configuration, Heuristics),
+    configuration_generator(Configuration, Generator),
+    append([DomainName, ProblemName, SourceResultCost, MetamorphicRelation, NumberOfTests, Generator], Heuristics, CsvHeader),
     list_to_comma_seperated_list(CsvHeader, CsvHeaderRecord),
     write_list(CsvFileStream, CsvHeaderRecord).
 
 write_csv_results_header(CsvFileStream) :-
-    CsvResultsHeader = [generator, node_cost, h, failure, error, 'execution_time(sec)', result_cost],
+    CsvResultsHeader = [node_cost, heuristic_name, heuristic_value, failure, error, 'execution_time(sec)', result_cost],
     list_to_comma_seperated_list(CsvResultsHeader, CsvResultsHeaderRecord),
     write_list(CsvFileStream, CsvResultsHeaderRecord).
 

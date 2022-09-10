@@ -1,8 +1,8 @@
 :- module(blackboard_data,
     [
-        set_blackboard/3, set_source_result/1, set_nb_nodes/1, set_nb_tests/1,
+        set_blackboard/3, set_source_result/1, set_nb_nodes/1, set_nb_tests/1, set_final_state/1,
         get_problem/1, get_domain/1, get_actions/1, get_objects/1, get_constants/1,
-        get_source_result/1, get_configuration/1, get_nb_tests/1, get_nb_nodes/1,
+        get_source_result/1, get_configuration/1, get_nb_tests/1, get_nb_nodes/1, get_final_state/1,
         update_nb_nodes/1, keep_generating/0,
         get_rigid_relations/1, get_rigid_relation_names/1, get_static_fluent_names/1, get_static_fluent_numbers/1
     ]).
@@ -39,6 +39,9 @@ set_blackboard(Configuration, Domain, Problem) :-
 set_source_result(SourceResult) :-
     bb_put(source_result, SourceResult).
 
+set_final_state(FinalState) :-
+    bb_put(final_state, FinalState). 
+
 set_nb_tests(NumberOfTests) :-
     bb_put(number_of_tests, NumberOfTests).
 
@@ -51,9 +54,9 @@ update_nb_nodes(N) :-
     bb_put(number_of_nodes, UpdatedNbNodes).
 
 keep_generating :-
-    bb_get(number_of_tests, NumberOfTests),
+    NB_NODES_MAX = 5000,
     bb_get(number_of_nodes, NumberOfNodes),
-    NumberOfNodes =< NumberOfTests.
+    NumberOfNodes =< NB_NODES_MAX.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% BLACKBOARD GETTERS
@@ -84,3 +87,5 @@ get_rigid_relations(RigidRelations) :- bb_get(rigid_relations, RigidRelations).
 get_static_fluent_names(StaticFluentNames) :- bb_get(static_fluent_names, StaticFluentNames).
 
 get_static_fluent_numbers(NumberForEachStaticFluent) :- bb_get(number_for_each_static_fluent, NumberForEachStaticFluent).
+
+get_final_state(FinalState) :- bb_get(final_state, FinalState).  

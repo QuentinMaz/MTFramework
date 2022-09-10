@@ -2,8 +2,8 @@
     [
         deserialise_configuration/2,
         configuration_planner_command/2, configuration_domain_filename/2, configuration_problem_filename/2,
-        configuration_result_filename/2, configuration_nb_tests/2, configuration_generators/2,
-        configuration_heuristic/2, configuration_metamorphic_relation/2, configuration_run_all_tests/2
+        configuration_result_filename/2, configuration_nb_tests/2, configuration_generator/2,
+        configuration_heuristics/2, configuration_metamorphic_relation/2, configuration_run_all_tests/2
     ]).
 
 :- use_module(read_file).
@@ -13,7 +13,7 @@
 %% CONFIGURATION STRUCTURE AND ACCESSORS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% configuration(_PlannerCommand, _DomainFilename, _ProblemFilename, _ResultFilename, _MetamorphicRelation, _NumberOfTests, _RunAllTests, _GeneratorsPredicates, _HeuristicPredicate).
+% configuration(_PlannerCommand, _DomainFilename, _ProblemFilename, _ResultFilename, _MetamorphicRelation, _NumberOfTests, _RunAllTests, _GeneratorsPredicate, _HeuristicPredicates).
 
 configuration_planner_command(configuration(PlannerCommand, _, _, _, _, _, _, _, _), PlannerCommand).
 configuration_domain_filename(configuration(_, DomainFilename, _, _, _, _, _, _, _), DomainFilename).
@@ -22,8 +22,8 @@ configuration_result_filename(configuration(_, _, _, ResultFilename, _, _, _, _,
 configuration_metamorphic_relation(configuration(_, _, _, _, MetamorphicRelation, _, _, _, _), MetamorphicRelation).
 configuration_nb_tests(configuration(_, _, _, _, _, NumberOfTests, _, _, _), NumberOfTests).
 configuration_run_all_tests(configuration(_, _, _, _, _, _, RunAllTests, _, _), RunAllTests).
-configuration_generators(configuration(_, _, _, _, _, _, _, GeneratorsPredicates, _), GeneratorsPredicates).
-configuration_heuristic(configuration(_, _, _, _, _, _, _, _, HeuristicPredicate), HeuristicPredicate).
+configuration_generator(configuration(_, _, _, _, _, _, _, GeneratorsPredicate, _), GeneratorsPredicate).
+configuration_heuristics(configuration(_, _, _, _, _, _, _, _, HeuristicPredicates), HeuristicPredicates).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% CONFIGURATION PREDICATES
@@ -47,8 +47,8 @@ json_configuration(configuration(PC, DF, PF, RF, MR, NbTests, RAT, Gen, H))
         key_string_value(metamorphic_relation, MR), [','],
         (key_integer_value(number_of_tests, NbTests), [','] ; []), % number of tests optional
         (key_boolean_value(run_all_tests, RAT), [','] ; []), % run_all_tests is optional
-        key_objects(generators, argument, Gen), [','],
-        key_object_value(heuristic, argument, H),
+        key_object_value(generator, argument, Gen), [','],
+        key_objects(heuristics, argument, H),
         ['}'].
 
 key_string_value(Key, StringValue) --> [Key], [':'], string_value(StringValue).
@@ -96,7 +96,7 @@ instantiate_optional_parameters(Configuration) :-
 
 :- begin_tests(basic_configuration).
 
-get_configuration(configuration('planner_command', 'domain_filename', 'problem_filename', 'result_filename', mr0, 42, false, [generator0(2), generator1(0,2)], heuristic0)).
+get_configuration(configuration('planner_command', 'domain_filename', 'problem_filename', 'result_filename', mr0, 42, false, generator0(2), [heuristic0])).
 
 test(planner_command_accessor, [setup(get_configuration(Config))]) :-
     configuration_planner_command(Config, 'planner_command').
@@ -119,10 +119,10 @@ test(nb_tests_accessor, [setup(get_configuration(Config))]) :-
 test(run_all_tests_accessor, [setup(get_configuration(Config))]) :-
     configuration_run_all_tests(Config, false).
 
-test(generators_accessor, [setup(get_configuration(Config))]) :-
-    configuration_generators(Config, [generator0(2),generator1(0,2)]).
+test(generator_accessor, [setup(get_configuration(Config))]) :-
+    configuration_generator(Config, generator0(2)).
 
-test(heuristic_accessor, [setup(get_configuration(Config))]) :-
-    configuration_heuristic(Config, heuristic0).
+test(heuristics_accessor, [setup(get_configuration(Config))]) :-
+    configuration_heuristics(Config, [heuristic0]).
 
 :- end_tests(basic_configuration).

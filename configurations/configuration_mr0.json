@@ -1,18 +1,23 @@
 {
-    "command": "./planners/mutated_planner.exe forward a_star_mutant1 h_diff",
-    "domain": "test/blocks/domain.pddl",
-    "problem": "test/blocks/blocks2.pddl",
-    "result" : "configuration_mr0.csv",
+    "command": "python3 wastar.py",
+    "domain": "benchmarks/gripper/domain.pddl",
+    "problem": "benchmarks/gripper/prob14.pddl",
+    "result" : "test1.csv",
     "metamorphic_relation": "mr0",
-    "number_of_tests": 15,
+    "number_of_tests": 10,
     "run_all_tests": true,
-    "generators": [
+    "generator": {
+        "name": "generator1"
+    },
+    "heuristics": [
         {
-            "name": "generator1"
+            "name": "h_distance_with_i"
+        },
+        {
+            "name": "h_distance_with_g"
+        },
+        {
+            "name": "h_random"
         }
-    ],
-    "heuristic":
-    {
-        "name": "h_zero"
-    }
+    ]
 }

@@ -3,7 +3,9 @@
         generator1/1, generator2/1, generator3/1, generator4/1, generator5/1,
 
         bfs_from_initial_state/2, progress_from_result_path/2, regress_from_goal_state/2, regress_from_result_path/2,
-        progress_from_state_with_plan/3, progress_randomly_from_initial_state/2, write_generators/0
+        progress_from_state_with_plan/3, progress_randomly_from_initial_state/2, write_generators/0,
+
+        validate_plan/1
     ]).
 
 :- use_module(library(ordsets), [ord_subtract/3, ord_union/3, ord_union/2, ord_subset/2, ord_add_element/3, ord_intersect/2, ord_disjoint/2]).
@@ -153,6 +155,16 @@ progress_with_action_definition(State, ActionDefinition, NextState) :-
     sort(TmpNE, NE),
     ord_subtract(State, NE, TmpState),
     ord_union(TmpState, PE, NextState).
+
+validate_plan(Plan) :-
+    get_problem(Problem),
+    problem_initial_state(Problem, InitialState),
+    problem_goal_state(Problem, GoalState),
+    progress_from_state_with_plan(InitialState, Plan, SourceStates),
+    append(_, [FinalState], SourceStates),
+    !,
+    ord_subset(GoalState, FinalState),
+    set_final_state(FinalState).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% GENERATORS
@@ -403,6 +415,7 @@ generator1(Results) :-
     get_source_result(SourceResult),
     length(SourceResult, SourceResultLength),
     MaximumDepth is SourceResultLength // 2 + 1,
+    format('generator1 launched with maximum depth of ~d\n', [MaximumDepth]),
     bfs_from_initial_state(MaximumDepth, Results).
 
 generator2(Results) :-
