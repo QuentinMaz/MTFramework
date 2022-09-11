@@ -45,7 +45,8 @@ parse_problem(File, Problem) :-
 % same as parseProblem/2 but also returns the rest of the file. It can be useful if the domain and problem are in one file
 parse_problem(F, O, R) :-
 	read_file(F, L),
-	problemBNF(O, L, R).
+	problemBNF(O, L, R),
+    !.
 
 %% deserialise_plan(+Filename, -Plan).
 deserialise_plan(Filename, Plan) :- deserialise_plan(Filename, Plan, []).

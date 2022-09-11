@@ -502,6 +502,30 @@ input_with_source_result('test/gripper/domain.pddl', 'test/gripper/gripper2.pddl
 input_with_source_result('test/gripper/domain.pddl', 'test/gripper/gripper2.pddl', [pick(ball4,rooma,right),move(rooma,roomb),drop(ball4,roomb,right),move(roomb,rooma),pick(ball3,rooma,right),move(rooma,roomb),drop(ball3,roomb,right),move(roomb,rooma),pick(ball2,rooma,right),move(rooma,roomb),drop(ball2,roomb,right),move(roomb,rooma),pick(ball1,rooma,right),move(rooma,roomb),drop(ball1,roomb,right)]).
 % input_with_source_result('test/grid/domain.pddl', 'test/grid/grid1.pddl', [move('node2-4','node1-4'),move('node1-4','node0-4'),move('node0-4','node0-3'),move('node0-3','node0-2'),pickup('node0-2',key3),move('node0-2','node1-2'),move('node1-2','node1-3'),unlock('node1-3','node2-3',key3,square),putdown('node1-3',key3),move('node1-3','node2-3'),pickup('node2-3',key0),move('node2-3','node1-3'),move('node1-3','node1-2'),move('node1-2','node1-1'),putdown('node1-1',key0)]).
 
+:- begin_tests(performance).
+
+:- use_module(library(lists), [max_member/2]).
+
+test(depot, [nondet]) :-
+    DF = 'benchmarks/depot/domain.pddl',
+    PF = 'benchmarks/depot/p02.pddl',
+    setup_input(DF, PF),
+    statistics(walltime, [TStart, _]),  
+    bfs_from_initial_state(4500, Nodes),
+    statistics(walltime, [TCurrent, _]),
+    length(Nodes, N),
+    TExec is (TCurrent - TStart) / 1000,
+    (
+        foreach(node(_, C, _), Nodes),
+        foreach(C, Depths)
+    do
+        true
+    ),
+    max_member(MaxDepth, Depths),
+    format('~d nodes generated in ~ds: maximum depth reached is ~d\n', [N, TExec, MaxDepth]).
+
+:- end_tests(performance).
+
 :- begin_tests(progression_based_generators).
 
 progression_based_generator(bfs_from_initial_state, [50]).

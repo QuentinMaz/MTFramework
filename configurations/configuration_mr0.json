@@ -1,7 +1,7 @@
 {
     "command": "python3 wastar.py",
-    "domain": "benchmarks/gripper/domain.pddl",
-    "problem": "benchmarks/gripper/prob14.pddl",
+    "domain": "experiments/hanoi/domain.pddl",
+    "problem": "experiments/hanoi/hanoi2.pddl",
     "result" : "test1.csv",
     "metamorphic_relation": "mr0",
     "number_of_tests": 10,

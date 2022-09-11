@@ -52,19 +52,24 @@ def run_configurations(domain_filepath: str, domain:str, problem_filepath: str, 
         for (k, v) in planners_dict.items():
             problem = problem_name.match(problem_filepath).group(1).lower()
             output = f'data/{k}_{domain}_{problem}__{generator}.csv'
-            run_framework(domain_filepath, problem_filepath, v, mr, NB_TESTS, output, generator, heuristics)
+            if f'{k}_{domain}_{problem}__{generator}.csv' in os.listdir('data'):
+                print(f'results for planner {k} on {domain}-{problem} with {generator} already exists.')
+                continue
+            else:
+                run_framework(domain_filepath, problem_filepath, v, mr, NB_TESTS, output, generator, heuristics)
 
 def run_experiments_planners():
     """
     runs all the configurations on PLANNERS on all problems.
     """
-    domain_folders = ['depot', 'rovers', 'driverlog', 'gripper', 'logistics00'] # os.listdir(DATA_SET_FOLDER) storageKO movieKO
+    domain_folders = os.listdir(DATA_SET_FOLDER)
+    domain_folders.sort()
     for domain_folder in domain_folders:
         domain_filepath = f'{DATA_SET_FOLDER}/{domain_folder}/domain.pddl'
         problem_filepaths = [f'{DATA_SET_FOLDER}/{domain_folder}/' + f for f in os.listdir(f'{DATA_SET_FOLDER}/{domain_folder}') if f.endswith('.pddl') and 'domain' not in f]
         problem_filepaths.sort()
-        for i in range(5):
-            run_configurations(domain_filepath, domain_folder, problem_filepaths[i], FD_PLANNERS, 'mr0', MR0_GENERATORS, HEURISTICS)
+        for problem_filepath in problem_filepaths:
+            run_configurations(domain_filepath, domain_folder, problem_filepath, FD_PLANNERS, 'mr0', MR0_GENERATORS, HEURISTICS)
 
 #######################################################
 ## IMPORT FUNCTIONS
@@ -111,4 +116,4 @@ def regroup_dataframes(filepaths: 'list[str]', result_filename: str):
 run_experiments_planners()
 # concatenates the results
 filepaths = ['data/' + f for f in os.listdir('data') if f.endswith('.csv')]
-regroup_dataframes(filepaths, 'fd_results.csv')
+regroup_dataframes(filepaths, 'fd_results_experiments.csv')

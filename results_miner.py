@@ -155,6 +155,47 @@ def save_chart_heuristics_efficiency_per_domain(filename: str):
     plt.savefig(filename)
 
 
+def save_chart_mutation_score(filename: str, metric: str) -> None:
+    """
+    Saves a chart that reports the mutation score for each heuristic. The metric can either be:
+        - the number of fault-revealing follow-up test cases
+        - the number of fault-revealing problems
+    """
+    scores = { h: [] for h in heuristics }
+    for planner in planners:
+        planner_df = df.loc[df.planner==planner]
+        for heuristic in heuristics:
+            score = 0
+            heuristic_df = planner_df.loc[planner_df.heuristic_name==heuristic]
+            for domain in domains:
+                domain_df = heuristic_df.loc[heuristic_df.domain==domain]
+                problems = domain_df['problem'].unique().tolist()
+                for problem in problems:
+                    problem_df = domain_df.loc[domain_df.problem==problem]
+                    # scores 1 per problem if the metric is 'problems'
+                    if metric == 'problems':
+                        if problem_df.loc[problem_df.failure==1].empty == False:
+                            score += 1
+                    # scores the number follow-up test cases performed if the metric is 'cases'
+                    if metric == 'cases':
+                        score += len(problem_df.loc[problem_df.failure==1])
+            scores[heuristic].append(score)
+    # plotting
+    _, ax = plt.subplots()
+    bar_width = 0.12
+    x = np.arange(len(planners))
+    for i in range(len(heuristics)):
+        heuristic = heuristics[i]
+        x_offset = (i - len(heuristics) / 2) * bar_width + bar_width / 2
+        ax.bar(x + x_offset, scores[heuristic], width=bar_width, label=heuristics_dict[heuristic])
+    ax.set_xticks(x)
+    ax.set_xticklabels(planners, rotation=45)
+    ax.set_ylabel('Number of fault-revealing problems' if metric == 'problems' else 'Number of fault-revealing test cases')
+    ax.set_title('Mutation scores per planner/mutant for each heuristic')
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(filename)
+
 heuristics_dict = {
     'min_h_distance_with_i': 'min_h_dist_i',
     'max_h_distance_with_i': 'max_h_dist_i',
@@ -184,3 +225,5 @@ save_chart_heuristics_coverage('fd_test_coverage.png')
 save_chart_heuristics_score_per_domain('fd_test_score_per_domain.png')
 save_chart_heuristics_coverage_per_domain('fd_test_coverage_per_domain.png')
 save_chart_heuristics_efficiency_per_domain('fd_test_efficiency_per_domain.png')
+save_chart_mutation_score('fd_mutation_score_problems.png', 'problems')
+save_chart_mutation_score('fd_mutation_score_cases.png', 'cases')

@@ -1,5 +1,5 @@
 :- use_module(library(process), [process_create/3]).
-:- use_module(library(lists), [nth1/3, keys_and_values/3, proper_prefix_length/3, proper_suffix_length/3]).
+:- use_module(library(lists), [nth1/3, keys_and_values/3, prefix_length/3, suffix_length/3]).
 :- use_module(library(system), [now/1]).
 :- use_module(library(random), [setrand/1, random_permutation/2]).
 
@@ -102,10 +102,12 @@ process_nodes(Nodes, Results) :-
     get_configuration(Configuration),
     configuration_heuristics(Configuration, Heuristics),
     configuration_nb_tests(Configuration, Nb_Tests),
+    length(Nodes, Nb_Nodes),
+    (Nb_Nodes < Nb_Tests -> N is Nb_Nodes ; N is Nb_Tests),
     (
         foreach(Heuristic, Heuristics),
         fromto([], In, Out, Results),
-        param(Nodes, Nb_Tests, Heuristics)
+        param(Nodes, N, Heuristics)
     do
         nth1(I, Heuristics, Heuristic),
         (
@@ -121,16 +123,16 @@ process_nodes(Nodes, Results) :-
             Heuristic == h_random -> 
             (
                 random_permutation(SortedNodes, Tmp1), 
-                proper_prefix_length(Tmp1, Tmp2, Nb_Tests),
+                prefix_length(Tmp1, Tmp2, N),
                 nodes3_to_nodes4(Tmp2, Heuristic, '', SelectedNodes)
             )
             ;
             (
-            proper_prefix_length(SortedNodes, Prefix, Nb_Tests),
-            nodes3_to_nodes4(Prefix, Heuristic, min_, MinNodes),
-            proper_suffix_length(SortedNodes, Suffix, Nb_Tests),
-            nodes3_to_nodes4(Suffix, Heuristic, max_, MaxNodes),
-            append(MinNodes, MaxNodes, SelectedNodes)
+                prefix_length(SortedNodes, Prefix, N),
+                nodes3_to_nodes4(Prefix, Heuristic, min_, MinNodes),
+                suffix_length(SortedNodes, Suffix, N),
+                nodes3_to_nodes4(Suffix, Heuristic, max_, MaxNodes),
+                append(MinNodes, MaxNodes, SelectedNodes)
             )
         ),
         append(In, SelectedNodes, Out)
