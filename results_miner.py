@@ -219,11 +219,12 @@ generators = df['generator'].unique().tolist()
 heuristics = df['heuristic_name'].unique().tolist()
 
 # general charts
-save_chart_heuristics_score('fd_test_score.png')
-save_chart_heuristics_coverage('fd_test_coverage.png')
+save_chart_heuristics_score('fd_score.png')
+save_chart_heuristics_coverage('fd_coverage.png')
 # charts where results are regrouped per domain
-save_chart_heuristics_score_per_domain('fd_test_score_per_domain.png')
-save_chart_heuristics_coverage_per_domain('fd_test_coverage_per_domain.png')
-save_chart_heuristics_efficiency_per_domain('fd_test_efficiency_per_domain.png')
+save_chart_heuristics_score_per_domain('fd_score_per_domain.png')
+save_chart_heuristics_coverage_per_domain('fd_coverage_per_domain.png')
+save_chart_heuristics_efficiency_per_domain('fd_efficiency_per_domain.png')
+# charts that detail results wrt the planners
 save_chart_mutation_score('fd_mutation_score_problems.png', 'problems')
 save_chart_mutation_score('fd_mutation_score_cases.png', 'cases')

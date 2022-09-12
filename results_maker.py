@@ -10,17 +10,17 @@ HEURISTICS = ['h_distance_with_i', 'h_distance_with_g', 'h_random']
 
 FD_PLANNERS = {
     # real non-optimal planners
-    'wastar_add': 'python3 fd_wastar.py 30 add 10',
-    'wastar_ff': 'python3 fd_wastar.py 30 ff 10',
-    'astar_add': 'python3 fd_astar.py 30 add',
-    'astar_ff': 'python3 fd_astar.py 30 ff',
+    'wastar_add': 'python3 fd_planners/fd_wastar.py 30 add 10',
+    'wastar_ff': 'python3 fd_planners/fd_wastar.py 30 ff 10',
+    'astar_add': 'python3 fd_planners/fd_astar.py 30 add',
+    'astar_ff': 'python3 fd_planners/fd_astar.py 30 ff',
     # mutated planners
-    'mutant1_add': 'python3 fd_mutant1.py 30 add', 
-    'mutant1_ff': 'python3 fd_mutant1.py 30 ff', 
-    'mutant2_add': 'python3 fd_mutant2.py 30 add', 
-    'mutant2_ff': 'python3 fd_mutant2.py 30 ff', 
-    'mutant3_add': 'python3 fd_mutant3.py 30 add', 
-    'mutant3_ff': 'python3 fd_mutant3.py 30 ff'
+    'mutant1_add': 'python3 fd_planners/fd_mutant1.py 30 add', 
+    'mutant1_ff': 'python3 fd_planners/fd_mutant1.py 30 ff', 
+    'mutant2_add': 'python3 fd_planners/fd_mutant2.py 30 add', 
+    'mutant2_ff': 'python3 fd_planners/fd_mutant2.py 30 ff', 
+    'mutant3_add': 'python3 fd_planners/fd_mutant3.py 30 add', 
+    'mutant3_ff': 'python3 fd_planners/fd_mutant3.py 30 ff'
 }
 
 problem_name = re.compile('.+/(.+).pddl')
