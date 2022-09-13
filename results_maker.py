@@ -23,17 +23,29 @@ FD_PLANNERS = {
     'mutant3_ff': 'python3 fd_planners/fd_mutant3.py 30 ff'
 }
 
+PROLOG_PLANNERS = {
+    'mutant1_add': '"./planners/prolog_planner forward a_star_mutant1 h_add"',
+    'mutant1_diff': '"./planners/prolog_planner forward a_star_mutant1 h_diff"',
+    'mutant1_length': '"./planners/prolog_planner forward a_star_mutant1 h_length"',
+    'mutant2_add': '"./planners/prolog_planner forward a_star_mutant2 h_add"',
+    'mutant2_diff': '"./planners/prolog_planner forward a_star_mutant2 h_diff"',
+    'mutant2_length': '"./planners/prolog_planner forward a_star_mutant2 h_length"',
+    'mutant3_add': '"./planners/prolog_planner forward a_star_mutant3 h_add"',
+    'mutant3_diff': '"./planners/prolog_planner forward a_star_mutant3 h_diff"',
+    'mutant3_length': '"./planners/prolog_planner forward a_star_mutant3 h_length"'
+}
+
 problem_name = re.compile('.+/(.+).pddl')
 
 #######################################################
 ## RUNNING FUNCTIONS
 #######################################################
 
-def run_framework(domain: str, problem: str, planner_command: str, mr: str, nb_tests: int, output: str, generator: str, heuristics: 'list[str]'):
+def run_framework(domain: str, problem: str, planners_commands: 'list[str]', mr: str, nb_tests: int, outputs: 'list[str]', generator: str, heuristics: 'list[str]'):
     """
     runs the framework a single time with the given configuration.
     """
-    command = f'sicstus -l framework.pl --goal "start, halt." -- {domain} {problem} "{planner_command}" {mr} {nb_tests} true {output} {generator} {" ".join(heuristics)}'
+    command = f'sicstus -l framework.pl --goal "start, halt." -- -d {domain} -p {problem} -h {" ".join(heuristics)} -c {" ".join(planners_commands)} -m {mr} -n {nb_tests} -r true -g {generator} -o {" ".join(outputs)}'
     # process = subprocess.run(command, stdout=subprocess.DEVNULL)
     print(f'\t\t\t{problem} started.')
     process = subprocess.run(command, shell=True, capture_output=True)
@@ -49,14 +61,11 @@ def run_configurations(domain_filepath: str, domain:str, problem_filepath: str, 
     It iterates on the list of planners at the end so it always run all planners and then change the configuration of the framework. 
     """
     for generator in generators:
-        for (k, v) in planners_dict.items():
-            problem = problem_name.match(problem_filepath).group(1).lower()
-            output = f'data/{k}_{domain}_{problem}__{generator}.csv'
-            if f'{k}_{domain}_{problem}__{generator}.csv' in os.listdir('data'):
-                print(f'results for planner {k} on {domain}-{problem} with {generator} already exists.')
-                continue
-            else:
-                run_framework(domain_filepath, problem_filepath, v, mr, NB_TESTS, output, generator, heuristics)
+        problem = problem_name.match(problem_filepath).group(1).lower()
+        outputs = []
+        for k in planners_dict.keys():
+            outputs.append(f'data/{k}_{domain}_{problem}__{generator}.csv')
+        run_framework(domain_filepath, problem_filepath, list(planners_dict.values()), mr, NB_TESTS, outputs, generator, heuristics)
 
 def run_experiments_planners():
     """
@@ -69,7 +78,7 @@ def run_experiments_planners():
         problem_filepaths = [f'{DATA_SET_FOLDER}/{domain_folder}/' + f for f in os.listdir(f'{DATA_SET_FOLDER}/{domain_folder}') if f.endswith('.pddl') and 'domain' not in f]
         problem_filepaths.sort()
         for problem_filepath in problem_filepaths:
-            run_configurations(domain_filepath, domain_folder, problem_filepath, FD_PLANNERS, 'mr0', MR0_GENERATORS, HEURISTICS)
+            run_configurations(domain_filepath, domain_folder, problem_filepath, PROLOG_PLANNERS, 'mr0', MR0_GENERATORS, HEURISTICS)
 
 #######################################################
 ## IMPORT FUNCTIONS
@@ -113,7 +122,7 @@ def regroup_dataframes(filepaths: 'list[str]', result_filename: str):
 #######################################################
 
 # runs all the experiments
-run_experiments_planners()
+# run_experiments_planners()
 # concatenates the results
 filepaths = ['data/' + f for f in os.listdir('data') if f.endswith('.csv')]
 regroup_dataframes(filepaths, 'fd_results_experiments.csv')

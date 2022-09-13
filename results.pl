@@ -1,4 +1,4 @@
-:- module(results, [set_csv_result/4, write_csv_results/2]).
+:- module(results, [set_csv_result/5, write_csv_results/2]).
 
 :- ensure_loaded(domain).
 :- ensure_loaded(problem).
@@ -63,9 +63,8 @@ write_list(FileStream, [Head|Tail]) :-
 %% RESULTS EXPORTING PREDICATES
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% set_csv_result(+Domain, +Problem, +Configuration, +SourceResultCost).
-set_csv_result(Domain, Problem, Configuration, SourceResultCost) :-
-    configuration_result_filename(Configuration, CsvFilename),
+%% set_csv_result(+Domain, +Problem, +Configuration, +CsvFilename, +SourceResultCost).
+set_csv_result(Domain, Problem, Configuration, CsvFilename, SourceResultCost) :-
     open(CsvFilename, write, CsvFileStream),
     write_csv_header(CsvFileStream, Domain, Problem, Configuration, SourceResultCost),
     write_csv_results_header(CsvFileStream),

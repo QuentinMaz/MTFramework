@@ -1,5 +1,5 @@
 :- use_module(library(process), [process_create/3]).
-:- use_module(library(lists), [nth1/3, keys_and_values/3, prefix_length/3, suffix_length/3]).
+:- use_module(library(lists), [nth1/3, keys_and_values/3, prefix_length/3, suffix_length/3, maplist/3, reverse/2]).
 :- use_module(library(system), [now/1]).
 :- use_module(library(random), [setrand/1, random_permutation/2]).
 
@@ -11,6 +11,17 @@
 :- ensure_loaded(blackboard_data).
 :- ensure_loaded(configuration).
 :- ensure_loaded(results).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% UTILS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+write_integer_list([LastInteger]) :-
+    format('~d', [LastInteger]).
+write_integer_list([Integer|Tail]) :-
+    format('~d ', [Integer]),
+    write_integer_list(Tail).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% SYSTEM COMMANDS
@@ -40,13 +51,33 @@ run_planner_command(Command, DomainFilename, ProblemFilename, ResultFilename, Ex
     statistics(walltime, [CurrentTime, _]),
     ExecutionTime is (CurrentTime - StartTime) / 1000.
 
-%% run_planner_commands(+PlannerCommand, +DomainFilename, +ProblemsFilenames, -ResultsFilenames, -ExecutionTimes).
+%% run_problems(+PlannerCommand, +DomainFilename, +ProblemsFilenames, -ResultsFilenames, -ExecutionTimes).
+% runs a single planner on multiple problems
 run_planner_commands(_PlannerCommand, _DomainFilename, [], [], []).
 run_planner_commands(PlannerCommand, DomainFilename, [ProblemFilename|T1], [ResultFilename|T2], [ExecutionTime|T3]) :-
     atom_concat(ProblemName, '.pddl', ProblemFilename),
     atom_concat(ProblemName, '.txt', ResultFilename),
     run_planner_command(PlannerCommand, DomainFilename, ProblemFilename, ResultFilename, _ExitStatus, ExecutionTime),
     run_planner_commands(PlannerCommand, DomainFilename, T1, T2, T3).
+
+run_problem(PlannersCommands, DomainFilename, ProblemFilename, Results) :-
+    atom_concat(ProblemPath, '.pddl', ProblemFilename),
+    atom_chars(ProblemPath, Chars),
+    reverse(Chars, ReversedChars),
+    append(ReversedProblemChars, ['/'|_], ReversedChars),
+    reverse(ReversedProblemChars, ProblemChars),
+    atom_chars(ProblemName, ProblemChars),
+    atom_concat('tmp/', ProblemName, ProblemNameInTmpFolder),
+    atom_concat(ProblemNameInTmpFolder, '.txt', ResultFilename),
+    (
+        foreach(PlannerCommand, PlannersCommands),
+        foreach(Result, Results),
+        param(DomainFilename, ProblemFilename, ResultFilename)
+    do
+        run_planner_command(PlannerCommand, DomainFilename, ProblemFilename, ResultFilename, _ExitStatus, _ExecutionTime),
+        deserialise_plan(ResultFilename, Result),
+        (validate_plan(Result) -> true ; Result = [])
+    ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% NODE PREDICATES
@@ -92,10 +123,32 @@ generate_nodes(Nodes) :-
     % generates the nodes
     generate_nodes_from_generator(Generator, GeneratedNodes),
     % computes all the heuristics available for each node
-    compute_nodes_heuristics(Heuristics, GeneratedNodes, RankedNodes),
-    % processes the nodes: the first and last nb_tests nodes wrt each heuristic
-    % so at the end it returns 2 * nb_tests * nb_heuristics nodes (and so follow-up test cases)
-    process_nodes(RankedNodes, Nodes).
+    compute_nodes_heuristics(Heuristics, GeneratedNodes, Nodes).
+
+select_nodes(_Nodes, [], []).
+select_nodes(Nodes, [[]|T1], [[]|T2]) :-
+    !,
+    write('empty source detected. Nodes selection aborted.\n'),
+    select_nodes(Nodes, T1, T2).
+select_nodes(Nodes, [SourceResult|T1], [SelectedNodes|T2]) :-
+    compute_bound(SourceResult, CostBound),
+    filter_nodes(Nodes, CostBound, FilteredNodes),
+    length(FilteredNodes, FDL),
+    format('~d nodes available after filtration with cost bound of ~d\n', [FDL, CostBound]),
+    process_nodes(FilteredNodes, SelectedNodes),
+    select_nodes(Nodes, T1, T2).
+
+compute_bound(Plan, CostBound) :-
+    length(Plan, PlanLength),
+    CostBound is PlanLength // 2 + 1.
+
+filter_nodes([], _, []).
+filter_nodes([nodes(_, Cost, _)|T1], CostBound, Result) :-
+    Cost > CostBound,
+    !,
+    filter_nodes(T1, Result).
+filter_nodes([Node|T1], CostBound, [Node|T2]) :-
+    filter_nodes(T1, CostBound, T2).
 
 %% process_nodes(+Nodes, -ProcessedNodes).
 process_nodes(Nodes, Results) :-
@@ -151,12 +204,11 @@ nodes3_to_nodes4([node(S, C, HV)|T1], HeuristicName, NamePrefix, [node(S, C, HN,
 %% INPUTS TESTS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% make_follow_up_inputs(+MetamorphicRelation, -FollowUpInputs).
-make_follow_up_inputs(mr0, FollowUpInputs) :-
-    generate_nodes(GeneratedNodes),
+%% make_follow_up_inputs(+MetamorphicRelation, +Nodes, -FollowUpInputs).
+make_follow_up_inputs(mr0, Nodes, FollowUpInputs) :-
     get_problem(Problem),
     (
-        foreach(Node, GeneratedNodes),
+        foreach(Node, Nodes),
         foreach(FollowUpInput, FollowUpInputs),
         param(Problem)
     do
@@ -224,99 +276,131 @@ user:runtime_entry(start) :-
     start.
 
 start :-
-    prolog_flag(argv, [ConfigurationFilename]),
-    main_read_configuration(ConfigurationFilename),
+    prolog_flag(argv, Arguments),
+    (
+        Arguments = [ConfigurationFilename] -> deserialise_configuration(ConfigurationFilename, Configuration)
+    ;   (Configuration = configuration(_, _, _, _, _, _, _, _, _), args_to_configuration(Arguments, Configuration))
+    ),
+    ground(Configuration),
+    main(Configuration),
     halt.
 
 start :-
-    prolog_flag(argv, Arguments),
-    length(Arguments, Nb_Arguments),
-    Nb_Arguments >= 9,
-    main_with_configuration(Arguments),
+    write('something went wrong while initialising the configuration.\n'),
     halt.
 
-main_read_configuration(ConfigurationFilename) :-
-    %%%%%%%%%%%%%%% manages the configuration reading %%%%%%%%%%%%%%%%%%
-    deserialise_configuration(ConfigurationFilename, Configuration),
+main(Configuration) :-
+    %%%%%%%%%%%%%%% accesses the configuration %%%%%%%%%%%%%%%%
     configuration_domain_filename(Configuration, DomainFilename),
     configuration_problem_filename(Configuration, ProblemFilename),
-    configuration_planner_command(Configuration, PlannerCommand),
+    configuration_planners_commands(Configuration, PlannersCommands),
     configuration_metamorphic_relation(Configuration, MetamorphicRelation),
-    configuration_result_filename(Configuration, CsvFilename),
+    configuration_results_filenames(Configuration, CsvFilenames),
     configuration_run_all_tests(Configuration, RAT),
     %%%%%%%%%%%%%%% makes the domain and problem models %%%%%%%%%%%%%%%%
     make_input(DomainFilename, ProblemFilename, Domain-Problem),
     %%%%%%%%%%%%%%% initilises the blackboard %%%%%%%%%%%%%%%%%%%%%%%%%%
     set_blackboard(Configuration, Domain, Problem),
     %%%%%%%%%%%%%%% launches metamorphic testing %%%%%%%%%%%%%%%%%%%%%%%
-    (   RAT -> test_planner_all(MetamorphicRelation, PlannerCommand, DomainFilename, ProblemFilename, 'tmp/output.txt', [SourceResultCost|TestResults])
-    ;   test_planner_until_failure(MetamorphicRelation, PlannerCommand, DomainFilename, ProblemFilename, 'tmp/output.txt', [SourceResultCost|TestResults])
+    (   RAT -> test_planner_all(MetamorphicRelation, PlannersCommands, DomainFilename, ProblemFilename, TestsResults)
+    ;   test_planner_until_failure(MetamorphicRelation, PlannersCommands, DomainFilename, ProblemFilename, 'tmp/output.txt', TestsResults)
     ),
     write('metamorphic testing done\n'),
     %%%%%%%%%%%%%%% exports the results %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    set_csv_result(Domain, Problem, Configuration, SourceResultCost),
-    write_csv_results(CsvFilename, TestResults),
-    format('results exported (~a)\n', [CsvFilename]).
+    (
+        foreach([SourceResultCost|TestResults], TestsResults),
+        foreach(CsvFilename, CsvFilenames),
+        param(Domain, Problem, Configuration)
+    do
+        set_csv_result(Domain, Problem, Configuration, CsvFilename, SourceResultCost),
+        write_csv_results(CsvFilename, TestResults),
+        format('results exported (~a)\n', [CsvFilename])
+    ),
+    write('all results exported.\n').
 
-main_with_configuration([DomainFilename, ProblemFilename, PlannerCommand, MetamorphicRelation, NBTestsAtom, RunAllTests, CsvFilename, GeneratorPredicate|HeuristicPredicates]) :-
-    % turns NBTestsAtom into an integer
+args_to_configuration([], _).
+args_to_configuration(Arguments, Configuration) :-
+    get_argument(Arguments, Configuration, Tail),
+    args_to_configuration(Tail, Configuration).
+
+get_argument(['-d', DomainFilename|T], configuration(_, DomainFilename, _, _, _, _, _, _, _), T).
+get_argument(['-p', ProblemFilename|T], configuration(_, _, ProblemFilename, _, _, _, _, _, _), T).
+get_argument(['-m', MetamorphicRelation|T], configuration(_, _, _, _, MetamorphicRelation, _, _, _, _), T).
+get_argument(['-g', GeneratorPredicate|T], configuration(_, _, _, _, _, _, _, GeneratorPredicate, _), T).
+get_argument(['-r', RunAllTests|T], configuration(_, _, _, _, _, _, RunAllTests, _, _), T).
+
+get_argument(['-n', NBTestsAtom|T], configuration(_, _, _, _, _, NBTests, _, _, _), T) :-
     atom_codes(NBTestsAtom, Codes),
-    number_codes(NBTests, Codes),
-    Configuration = configuration(PlannerCommand, DomainFilename, ProblemFilename, CsvFilename, MetamorphicRelation, NBTests, RunAllTests, GeneratorPredicate, HeuristicPredicates),
-    %%%%%%%%%%%%%%% makes the domain and problem models %%%%%%%%%%%%%%%%
-    make_input(DomainFilename, ProblemFilename, Domain-Problem),
-    %%%%%%%%%%%%%%% initilises the blackboard %%%%%%%%%%%%%%%%%%%%%%%%%%
-    set_blackboard(Configuration, Domain, Problem),
-    %%%%%%%%%%%%%%% launches metamorphic testing %%%%%%%%%%%%%%%%%%%%%%%
-    (   RunAllTests -> test_planner_all(MetamorphicRelation, PlannerCommand, DomainFilename, ProblemFilename, 'tmp/output.txt', [SourceResultCost|TestResults])
-    ;   test_planner_until_failure(MetamorphicRelation, PlannerCommand, DomainFilename, ProblemFilename, 'tmp/output.txt', [SourceResultCost|TestResults])
-    ),
-    write('metamorphic testing done\n'),
-    %%%%%%%%%%%%%%% exports the results %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    set_csv_result(Domain, Problem, Configuration, SourceResultCost),
-    write_csv_results(CsvFilename, TestResults),
-    format('results exported (~a)\n', [CsvFilename]).
+    number_codes(NBTests, Codes).
 
-%% test_planner_all(+MetamorphicRelation, +PlannerCommand, +DomainFilename, +ProblemFilename, +SourceResultFilename, -TestResults).
-test_planner_all(MetamorphicRelation, PlannerCommand, DomainFilename, ProblemFilename, SourceResultFilename, [SourceResultCost|TestResults]) :-
-    run_planner_command(PlannerCommand, DomainFilename, ProblemFilename, SourceResultFilename, _ExitStatus, _ExecutionTime),
-    write('initial problem run\n'),
-    deserialise_plan(SourceResultFilename, SourceResult),
-    write('source result deserialised'),
-    validate_plan(SourceResult),
-    !,
-    length(SourceResult, SourceResultCost),
-    format(' (of cost ~d)\n', [SourceResultCost]),
-    set_source_result(SourceResult),
-    write('blackboard updated with the source result\n'),
-    % makes the follow-up inputs wrt the metamorphic relation
-    make_follow_up_inputs(MetamorphicRelation, FollowUpInputs),
-    length(FollowUpInputs, L),
-    format('follow-up inputs made (~d)\n', [L]),
-    % serialises the follow-up inputs
-    serialise_follow_up_inputs(FollowUpInputs, FollowUpInputsFilenames, 0),
-    write('follow-up inputs serialised\n'),
-    % runs the planner on every follow-up input
-    run_planner_commands(PlannerCommand, DomainFilename, FollowUpInputsFilenames, FollowUpResultsFilenames, ExecutionTimes),
-    write('follow-up problems run\n'),
-    % deserialises all the follow-up results
-    deserialise_plans(FollowUpResultsFilenames, FollowUpResults),
-    write('follow-up results deserialised\n'),
-    % checks the metamorphic relation for every follow-up test case result
-    check_metamorphic_relation(SourceResult, FollowUpInputs, FollowUpResults, Results),
-    % completes the results by adding the previously retrieved execution times (when running planner)
-    set_execution_times(Results, ExecutionTimes, TestResults),
-    % removes all the temporary generated files
-    remove_tmp_files.
-    % append([SourceResultFilename|FollowUpInputsFilenames], FollowUpResultsFilenames, FilenamesToRemove),
-    % remove_files(FilenamesToRemove).
-test_planner_all(_, _, _, _, _, [0]) :-
-    write('\nsource result not valid\n').
+get_argument(['-o'|Arguments], configuration(_, _, _, ResultsFilenames, _, _, _, _, _), [NextArgumentFlag|T]) :-
+    append(ResultsFilenames, [NextArgumentFlag|T], Arguments),
+    atom_codes(NextArgumentFlag, [45, _]),
+    !.
+get_argument(['-o'|ResultsFilenames], configuration(_, _, _, ResultsFilenames, _, _, _, _, _), []).
+
+get_argument(['-h'|Arguments], configuration(_, _, _, _, _, _, _, _, HeuristicsPredicates), [NextArgumentFlag|T]) :-
+    append(HeuristicsPredicates, [NextArgumentFlag|T], Arguments),
+    atom_codes(NextArgumentFlag, [45, _]),
+    !.
+get_argument(['-h'|HeuristicsPredicates], configuration(_, _, _, _, _, _, _, _, HeuristicsPredicates), []).
+
+get_argument(['-c'|Arguments], configuration(PlannersCommands, _, _, _, _, _, _, _, _), [NextArgumentFlag|T]) :-
+    append(PlannersCommands, [NextArgumentFlag|T], Arguments),
+    atom_codes(NextArgumentFlag, [45, _]),
+    !.
+get_argument(['-c'|PlannersCommands], configuration(PlannersCommands, _, _, _, _, _, _, _, _), []).
+
+%% test_planner_all(+MetamorphicRelation, +PlannersCommands, +DomainFilename, +ProblemFilename, -TestsResults).
+test_planner_all(MetamorphicRelation, PlannersCommands, DomainFilename, ProblemFilename, TestsResults) :-
+    % runs the planners on the source problem
+    run_problem(PlannersCommands, DomainFilename, ProblemFilename, SourceResults),
+    write('initial problem run on all planners'),
+    maplist(length, SourceResults, SourceResultsCosts),
+    format(' (of cost ~@)\n', [write_integer_list(SourceResultsCosts)]),
+    set_source_result(SourceResults),
+    write('blackboard updated with the source results\n'),
+    % generates all the nodes and ranks them all
+    generate_nodes(AllGeneratedNodes),
+    % selects for each planner a selection of nodes (wrt their source result)
+    select_nodes(AllGeneratedNodes, SourceResults, SelectedNodes),
+    % loops over the MT procedure for each planner (command)
+    (
+        foreach(PlannerCommand, PlannersCommands),
+        foreach(SourceResult, SourceResults),
+        foreach(Nodes, SelectedNodes),
+        foreach(SourceResultCost, SourceResultsCosts),
+        foreach([SourceResultCost|TestResults], TestsResults),
+        param(MetamorphicRelation, DomainFilename)  
+    do
+        (SourceResultCost == 0 -> TestResults = [] ; (
+        % makes the follow-up inputs wrt the metamorphic relation
+        make_follow_up_inputs(MetamorphicRelation, Nodes, FollowUpInputs),
+        length(FollowUpInputs, L),
+        format('follow-up inputs made (~d)\n', [L]),
+        % serialises the follow-up inputs
+        serialise_follow_up_inputs(FollowUpInputs, FollowUpInputsFilenames, 0),
+        write('follow-up inputs serialised\n'),
+        % runs the planners on every follow-up input
+        run_planner_commands(PlannerCommand, DomainFilename, FollowUpInputsFilenames, FollowUpResultsFilenames, ExecutionTimes),
+        write('follow-up problems run\n'),
+        % deserialises all the follow-up results
+        deserialise_plans(FollowUpResultsFilenames, FollowUpResults),
+        % checks the metamorphic relation for every follow-up test case result
+        check_metamorphic_relation(SourceResult, FollowUpInputs, FollowUpResults, Results),
+        % completes the results by adding the previously retrieved execution times (when running planner)
+        set_execution_times(Results, ExecutionTimes, TestResults),
+        remove_tmp_files))
+    ).
+test_planner_all(_, _, _, _, _) :-
+    write('\nsomething went wrong during metamorphic testing.\n').
 
 %% set_execution_times(+Results, +ExecutionTimes, -TestResults).
 set_execution_times([], [], []).
 set_execution_times([result(N, F, E, _, RC)|T1], [ExecutionTime|T2], [result(N, F, E, ExecutionTime, RC)|T3]) :-
     set_execution_times(T1, T2, T3).
+
+%%%%%%%%%%%%%%%%% TOREDO %%%%%%%%%%%%%%%%%%
 
 %% test_planner_until_failure(+MetamorphicRelation, +PlannerCommand, +DomainFilename, +ProblemFilename, +SourceResultFilename, -TestResults).
 test_planner_until_failure(MetamorphicRelation, PlannerCommand, DomainFilename, ProblemFilename, SourceResultFilename, [SourceResultCost|TestResults]) :-

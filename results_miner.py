@@ -210,7 +210,7 @@ heuristics_dict = {
 #######################################################
 
 
-df = pd.read_csv('fd_results.csv', header=0)
+df = pd.read_csv('prolog_results_experiments.csv', header=0)
 domains = df['domain'].unique().tolist()
 domains.sort()
 problems = df['problem'].unique().tolist()
@@ -218,13 +218,14 @@ planners = df['planner'].unique().tolist()
 generators = df['generator'].unique().tolist()
 heuristics = df['heuristic_name'].unique().tolist()
 
+prefix = 'prolog_'
 # general charts
-save_chart_heuristics_score('fd_score.png')
-save_chart_heuristics_coverage('fd_coverage.png')
+save_chart_heuristics_score(prefix + 'score.png')
+save_chart_heuristics_coverage(prefix + 'coverage.png')
 # charts where results are regrouped per domain
-save_chart_heuristics_score_per_domain('fd_score_per_domain.png')
-save_chart_heuristics_coverage_per_domain('fd_coverage_per_domain.png')
-save_chart_heuristics_efficiency_per_domain('fd_efficiency_per_domain.png')
+save_chart_heuristics_score_per_domain(prefix + 'score_per_domain.png')
+save_chart_heuristics_coverage_per_domain(prefix + 'coverage_per_domain.png')
+save_chart_heuristics_efficiency_per_domain(prefix + 'efficiency_per_domain.png')
 # charts that detail results wrt the planners
-save_chart_mutation_score('fd_mutation_score_problems.png', 'problems')
-save_chart_mutation_score('fd_mutation_score_cases.png', 'cases')
+save_chart_mutation_score(prefix + 'mutation_score_problems.png', 'problems')
+save_chart_mutation_score(prefix + 'mutation_score_cases.png', 'cases')

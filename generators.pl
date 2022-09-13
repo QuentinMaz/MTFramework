@@ -11,7 +11,7 @@
 :- use_module(library(ordsets), [ord_subtract/3, ord_union/3, ord_union/2, ord_subset/2, ord_add_element/3, ord_intersect/2, ord_disjoint/2]).
 :- use_module(library(queues), [queue_cons/3, list_queue/2, queue_append/3, queue_memberchk/2, empty_queue/1]).
 :- use_module(library(sets), [is_set/1, list_to_set/2]).
-:- use_module(library(lists), [selectchk/3, reverse/2, maplist/3]).
+:- use_module(library(lists), [selectchk/3, reverse/2, maplist/3, max_member/2]).
 :- use_module(library(random), [random_member/2, maybe/1]).
 :- use_module(library(plunit)).
 
@@ -412,8 +412,9 @@ progress_and_gather_randomly(State, NumberOfActions, [State|T]) :-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 generator1(Results) :-
-    get_source_result(SourceResult),
-    length(SourceResult, SourceResultLength),
+    get_source_result(SourceResults),
+    maplist(length, SourceResults, SourceResultCosts),
+    max_member(SourceResultLength, SourceResultCosts),
     MaximumDepth is SourceResultLength // 2 + 1,
     format('generator1 launched with maximum depth of ~d\n', [MaximumDepth]),
     bfs_from_initial_state(MaximumDepth, Results).

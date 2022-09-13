@@ -1,0 +1,26 @@
+{
+    "planners_commands": [
+        "planner_command1",
+        "planner_command2",
+        "planner_command3"
+    ],
+    "domain": "domain_filename",
+    "problem": "problem_filename",
+    "results" : [
+        "test1.csv",
+        "test2.csv",
+        "test3.csv"
+    ],
+    "metamorphic_relation": "mr0",
+    "number_of_tests": 42,
+    "run_all_tests": false,
+    "generator": {
+        "name": "generator0",
+        "arguments": [2]
+    },
+    "heuristics": [
+        {
+            "name": "heuristic0"
+        }
+    ]
+}

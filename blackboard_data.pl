@@ -54,7 +54,7 @@ update_nb_nodes(N) :-
     bb_put(number_of_nodes, UpdatedNbNodes).
 
 keep_generating :-
-    NB_NODES_MAX = 500,
+    NB_NODES_MAX = 10000,
     bb_get(number_of_nodes, NumberOfNodes),
     NumberOfNodes =< NB_NODES_MAX.
 

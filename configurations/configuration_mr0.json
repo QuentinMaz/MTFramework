@@ -1,10 +1,16 @@
 {
-    "command": "python3 wastar.py",
-    "domain": "experiments/hanoi/domain.pddl",
-    "problem": "experiments/hanoi/hanoi2.pddl",
-    "result" : "test1.csv",
+    "planners_commands": [
+        "./planners/prolog_planner forward a_star_mutant1 h_add",
+        "./planners/prolog_planner forward a_star_mutant1 h_length"
+    ],
+    "domain": "benchmarks/gripper/domain.pddl",
+    "problem": "benchmarks/gripper/prob05.pddl",
+    "results" : [
+        "mutant1_h_add.csv",
+        "mutant1_h_length.csv"
+    ],
     "metamorphic_relation": "mr0",
-    "number_of_tests": 10,
+    "number_of_tests": 2,
     "run_all_tests": true,
     "generator": {
         "name": "generator1"
