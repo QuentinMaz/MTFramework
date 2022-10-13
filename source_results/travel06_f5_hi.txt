@@ -1,0 +1,4 @@
+(fly-red nv fl plane-0)
+(fly-red fl nj plane-2)
+(fly-red nj id plane-1)
+(fly-red id ky plane-3)

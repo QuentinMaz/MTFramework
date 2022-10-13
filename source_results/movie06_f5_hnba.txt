@@ -1,0 +1,7 @@
+(rewind-movie)
+(get-pop p6)
+(get-dip d6)
+(get-chips c3)
+(get-crackers k9)
+(get-cheese z4)
+(reset-counter)

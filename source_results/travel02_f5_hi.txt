@@ -1,0 +1,5 @@
+(walk nj pe)
+(walk pe wv)
+(walk wv ky)
+(fly-red ky og plane-0)
+(walk og ca)

@@ -1,0 +1,7 @@
+(walk nj pe)
+(walk pe wv)
+(drive wv tn ky car-0)
+(walk tn ky)
+(fly-red ky og plane-0)
+(walk og ca)
+(fly-blue ca tx plane-1)
