@@ -1,24 +1,25 @@
-:- module(pddl_serialiser, [serialise_problem/2, write_plan/2]).
+:- module(pddl_serialiser, [serialise_problem/2, serialise_states/2]).
 
-%% write_plan(+Plan, +Filename).
-write_plan(Plan, Filename) :-
+%% serialise_states(+Filename, +States).
+serialise_states(Filename, States) :-
     open(Filename, write, FileStream),
     set_output(FileStream),
-    write_plan(Plan),
+    write_states_with_cost(States),
     flush_output(FileStream),
     told.
 
-write_plan([]).
-write_plan([ActionDef|T]) :-
-    ActionDef =.. [Action|Parameters],
-    format('(~a~@)\n', [Action, write_list(Parameters)]),
-    write_plan(T).
+write_states_with_cost([]).
+write_states_with_cost([Cost-State|T]) :-
+    format('~d,[~@]\n', [Cost, write_state(State)]),
+    write_states_with_cost(T).
 
-write_list([]).
-write_list([H|T]) :-
-    write(' '),
-    write(H),
-    write_list(T).
+write_state([Fact]) :-
+    Fact =.. [Name|Variables],
+    format('~a~@', [Name, write_list(Variables)]).
+write_state([Fact|T]) :-
+    Fact =.. [Name|Variables],
+    format('~a~@,', [Name, write_list(Variables)]),
+    write_state(T).
 
 serialise_problem(Problem, Filename) :-
     open(Filename, write, FileStream),
@@ -69,4 +70,10 @@ write_typed_list([TypedHead|T]) :-
 write_typed_list([UntypedHead|T]) :-
     write(' '),
     write(UntypedHead),
+    write_list(T).
+
+write_list([]).
+write_list([H|T]) :-
+    write(' '),
+    write(H),
     write_list(T).

@@ -1,16 +1,17 @@
 :- module(domain,
     [
-        domain_actions/2, domain_constants/2, domain_name/2, domain_predicates/2,
-        action_parameters/2, action_preconditions/2, action_positive_effects/2, action_negative_effects/2, action_definition/2,
-        generate_action/1,
-        instantiate_parameters/1,
-        process_domain/3, check_rigid_relations/3, check_static_fluents/3
+        domain_actions/2, domain_constants/2, domain_name/2, domain_predicates/2, domain_types/2,
+        action_parameters/2, action_preconditions/2, action_positive_effects/2, action_negative_effects/2, untyped_action/2,
+        ground_predicates/4, ground_actions/3, generate_action/1
     ]).
 
 :- use_module(library(ordsets), [ord_subtract/3, ord_union/2, ord_subset/2]).
 :- use_module(library(lists), [maplist/3]).
+:- use_module(library(sets), [is_set/1]).
 
 :- ensure_loaded(blackboard_data).
+:- ensure_loaded(problem).
+:- ensure_loaded(utils).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% DOMAIN STRUCTURE AND ACCESSORS
@@ -19,9 +20,10 @@
 % domain(_Name, _Requirements, _Types, _Constants, _Predicates, _Functions, _Constraints, _SructureDefinitions).
 
 domain_name(domain(Name, _, _, _, _, _, _, _), Name).
-domain_predicates(domain(_, _, _, _, Predicates, _, _, _), Predicates).
 domain_actions(domain(_, _, _, _, _, _, _, Actions), Actions).
 domain_constants(domain(_, _, _, Constants, _, _, _, _), Constants).
+domain_predicates(domain(_, _, _, _, Predicates, _, _, _), Predicates).
+domain_types(domain(_, _, Types, _, _, _, _, _), Types).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% ACTIONS PREDICATES
@@ -31,9 +33,9 @@ action_parameters(action(_, Parameters, _, _, _, _), Parameters).
 action_preconditions(action(_, _, Preconditions, _, _, _), Preconditions).
 action_positive_effects(action(_, _, _, PositiveEffects, _, _), PositiveEffects).
 action_negative_effects(action(_, _, _, _, NegativeEffects, _), NegativeEffects).
-action_definition(action(Name, Parameters, _, _, _, _), ActionDefinition) :-
+untyped_action(action(Name, Parameters, _, _, _, _), UntypedAction) :-
     untype_parameters(Parameters, UntypedParameters),
-    ActionDefinition =.. [Name|UntypedParameters].
+    UntypedAction =.. [Name|UntypedParameters].
 
 %% untype_parameters(+Parameters, -UntypedParameters).
 untype_parameters([], []).
@@ -44,6 +46,10 @@ untype_parameters([TypedHead|T1], [UntypedHead|T2]) :-
 untype_parameters(T1, T2).
 untype_parameters([H|T1], [H|T2]) :-
     untype_parameters(T1, T2).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ACTIONS GENERATION
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% generate_action(-Action).
 generate_action(Action) :-
@@ -90,47 +96,64 @@ register_variable(V, [X/H|T], H, [X/H|T]) :-
 % registers a new variable N to the term V
 register_variable(V, [], N, [V/N]).
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% PARAMETERS PREDICATES
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %% instantiate_parameters(-GroundParameters).
-instantiate_parameters(Parameters) :-
-    get_objects(Objects),
-    get_constants(Constants),
-    instantiate_parameters(Objects, Constants, Parameters).
-
-%% instantiate_parameters(+Objects, +Constants, -GroundParameters).
 % makes a ground instance of a list of parameters
-instantiate_parameters(_, _, []).
-% already ground case (the parameter is a constant)
-instantiate_parameters(Objects, Constants, [Param|Ps]) :-
-    ground(Param),
+instantiate_parameters([]).
+% already ground case (the parameter is... a constant ?)
+instantiate_parameters([Parameter|Ps]) :-
+    ground(Parameter),
     !,
-    member(Param, Constants),
-    instantiate_parameters(Objects, Constants, Ps).
-% untyped case : it unifies Param with one of the untyped objects
-instantiate_parameters(Objects, Constants, [Param|Ps]) :-
-    var(Param),
+    % to do : check whether Parameter is declared in the constants of the problem (/!\ constants is a typed list !)
+    instantiate_parameters(Ps).
+% untyped case: it unifies Parameter with one of the untyped parameters
+instantiate_parameters([Parameter|Ps]) :-
+    var(Parameter),
     !,
-    member(Param, Objects),
-    instantiate_parameters(Objects, Constants, Ps).
-% typed case : it unifies Param with one of the matching typed objects
-instantiate_parameters(Objects, Constants, [Param|Ps]) :-
-    \+ ground(Param),
-    Param =.. [TypeName, Var], % type(var)
-    TypedObject =.. [TypeName, Var], % type(object)
-    member(TypedObject, Objects),
-    instantiate_parameters(Objects, Constants, Ps).
+    get_untyped_variables(UntypedParameters),
+    member(Parameter, UntypedParameters),
+    instantiate_parameters(Ps).
+% typed case: it unifies Parameter with one of the matching typed parameters
+instantiate_parameters([Parameter|Ps]) :-
+    \+ ground(Parameter),
+    !,
+    Parameter =.. [TypeName, Var], % type(var)
+    TypedParameter =.. [TypeName, Var], % type(parameter)
+    get_typed_variables(TypedParameters),
+    member(TypedParameter, TypedParameters),
+    instantiate_parameters(Ps).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% MODEL CHECKING PREDICATES (STATE VALIDITY)
+%% GROUNDING PREDICATES
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% processes the domain by returning the names of the rigid relations and static fluents
-%% process_domain(+Domain, -RigidRelationNames, -StaticFluentNames).
-process_domain(Domain, RigidRelationNames, StaticFluentNames) :-
+ground_predicates(Domain, Problem, RigidPredicatesNames, RigidFacts) :-
+    domain_predicates_names(Domain, _PN, _FN, RigidPredicatesNames),
+    % format('predicates:\n~p\n\nfluents:\n~p\n\nrigid predicates:\n~p\n\n', [PN, FN, RigidPredicatesNames]),
+    % ground the rigid predicates of the current problem
+    problem_initial_state(Problem, InitialState),
+    filter_predicates_with_names(InitialState, RigidPredicatesNames, Tmp),
+    ord_union(Tmp, RigidFacts).
+
+ground_actions(RigidPredicatesNames, RigidFacts, Operators) :-
+    findall(A,
+    (
+        generate_action(A), action_parameters(A, Parameters), instantiate_parameters(Parameters), % is_set(Parameters),
+        action_preconditions(A, P), filter_predicates_with_names(P, RigidPredicatesNames, TmpRF), ord_union(TmpRF, RF), ord_subset(RF, RigidFacts)
+    )
+    , Operators).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% HELPERS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+domain_predicates_names(Domain, PredicatesNames, FluentNames, RigidPredicatesNames) :-
     domain_predicates(Domain, Predicates),
     domain_actions(Domain, Actions),
-    % format('\n~p\n~p\n', [Predicates, Actions]),
-    % finds state-invariant predicates aka rigid relations
-    % vs fluents = flexible relations
+    % finds state-invariant predicates aka rigid predicates
     (
         foreach(Action, Actions),
         fromto([], In, Out, Fluents)
@@ -144,66 +167,5 @@ process_domain(Domain, RigidRelationNames, StaticFluentNames) :-
     predicates_names(Fluents, FNames),
     predicates_names(Predicates, PNames),
     sort(FNames, FluentNames),
-    sort(PNames, PredicateNames),
-    ord_subtract(PredicateNames, FluentNames, RigidRelationNames),
-    % format('\npredicates of domain are :\n~p\nfluents of domain are :\n~p\nrigid relations of domain are :\n~p', [PredicateNames, FluentNames, RigidRelationNames]),
-    % finds static fluents : fluents whose parameters can change but their number of instances never change
-    (
-        foreach(FluentName, FluentNames),
-        fromto([], In, Out, SFNames),
-        param(Actions)
-    do
-        (is_static_fluent(FluentName, Actions) -> Out = [FluentName|In] ; Out = In)
-    ),
-    sort(SFNames, StaticFluentNames).
-    % format('\nstatic fluents of domain are :\n~p\n\n', [StaticFluentNames]).
-
-% is_static_fluent(FluentName, Actions).
-is_static_fluent(_, []).
-is_static_fluent(Name, [Action|T]) :-
-    action_positive_effects(Action, Pos),
-    sort(Pos, SPos),
-    predicates_from_name(SPos, Name, Tmp1),
-    action_negative_effects(Action, Neg),
-    sort(Neg, SNeg),
-    predicates_from_name(SNeg, Name, Tmp2),
-    length(Tmp1, L1),
-    length(Tmp2, L2),
-    R is L2 - L1,
-    R == 0,
-    is_static_fluent(Name, T).
-
-%% check_rigid_relations(+State, +RigidRelationNames, +RigidRelations).
-check_rigid_relations(State, RigidRelationNames, RigidRelations) :-
-    maplist(predicates_from_name(State), RigidRelationNames, Tmp),
-    ord_union(Tmp, FlatTmp),
-    % format('\nrigid relations are :\n~p\nrigid relations of S are :\n~p\n', [RigidRelations, FlatTmp]),
-    ord_subset(FlatTmp, RigidRelations).
-
-% checks for each static fluent that its number of instances in State are lesser or equal wrt NumberOfStaticFluents
-%% check_static_fluents(+State, +StaticFluentNames, +NumberForEachStaticFluent).
-check_static_fluents(State, StaticFluentNames, NumberForEachStaticFluent) :-
-    maplist(predicates_from_name(State), StaticFluentNames, Tmp),
-    maplist(length, Tmp, StaticFluentNumbers),
-    maplist(=<, StaticFluentNumbers, NumberForEachStaticFluent).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% HELPERS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% retrieves all the names of the terms in Predicates (/!\ may have duplicates)
-%% predicates_names(Predicates, PredicatesNames).
-predicates_names([], []).
-predicates_names([H|T1], [Name|T2]) :-
-    H =.. [Name|_],
-    predicates_names(T1, T2).
-
-% accumulates the predicates whose name matches Name
-%% predicates_from_name(Pred, Name, Res).
-predicates_from_name([], _, []).
-predicates_from_name([H|T1], Name, [H|T2]) :-
-    H =.. [Name|_],
-    !,
-    predicates_from_name(T1, Name, T2).
-predicates_from_name([_|T1], Name, Results) :-
-    predicates_from_name(T1, Name, Results).
+    sort(PNames, PredicatesNames),
+    ord_subtract(PredicatesNames, FluentNames, RigidPredicatesNames).

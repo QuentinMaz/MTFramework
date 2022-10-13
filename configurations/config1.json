@@ -1,0 +1,13 @@
+{
+    "planner_command": "planners/prolog_planner.exe mutated_astar-f1 h_max",
+    "domain": "benchmarks/airport/domain07.pddl",
+    "problem": "benchmarks/airport/task07.pddl",
+    "result" : "test.csv",
+    "output" : "tmp/output.txt",
+    "number_of_tests": 10,
+    "generators": [
+        {
+            "name": "select_random"
+        }
+    ]
+}

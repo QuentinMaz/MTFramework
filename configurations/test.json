@@ -1,0 +1,14 @@
+{
+    "planner_command": "planner_command",
+    "domain": "domain_filename",
+    "problem": "problem_filename",
+    "result" : "result_filename",
+    "output" : "output_filename",
+    "number_of_tests": 42,
+    "generators": [
+        {
+            "name": "generator",
+            "arguments": [42]
+        }
+    ]
+}

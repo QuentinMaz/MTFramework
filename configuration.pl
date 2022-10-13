@@ -2,7 +2,7 @@
     [
         deserialise_configuration/2,
         configuration_planner_command/2, configuration_domain_filename/2, configuration_problem_filename/2,
-        configuration_result_filename/2, configuration_nb_tests/2, configuration_generators/2,
+        configuration_result_filename/2, configuration_output_filename/2, configuration_nb_tests/2, configuration_generators/2,
         configuration_heuristic/2, configuration_metamorphic_relation/2, configuration_run_all_tests/2
     ]).
 
@@ -13,17 +13,15 @@
 %% CONFIGURATION STRUCTURE AND ACCESSORS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% configuration(_PlannerCommand, _DomainFilename, _ProblemFilename, _ResultFilename, _MetamorphicRelation, _NumberOfTests, _RunAllTests, _GeneratorsPredicates, _HeuristicPredicate).
+% configuration(_PlannerCommand, _DomainFilename, _ProblemFilename, _ResultFilename, _OutputFilename, _NumberOfTests, _GeneratorsPredicates).
 
-configuration_planner_command(configuration(PlannerCommand, _, _, _, _, _, _, _, _), PlannerCommand).
-configuration_domain_filename(configuration(_, DomainFilename, _, _, _, _, _, _, _), DomainFilename).
-configuration_problem_filename(configuration(_, _, ProblemFilename, _, _, _, _, _, _), ProblemFilename).
-configuration_result_filename(configuration(_, _, _, ResultFilename, _, _, _, _, _), ResultFilename).
-configuration_metamorphic_relation(configuration(_, _, _, _, MetamorphicRelation, _, _, _, _), MetamorphicRelation).
-configuration_nb_tests(configuration(_, _, _, _, _, NumberOfTests, _, _, _), NumberOfTests).
-configuration_run_all_tests(configuration(_, _, _, _, _, _, RunAllTests, _, _), RunAllTests).
-configuration_generators(configuration(_, _, _, _, _, _, _, GeneratorsPredicates, _), GeneratorsPredicates).
-configuration_heuristic(configuration(_, _, _, _, _, _, _, _, HeuristicPredicate), HeuristicPredicate).
+configuration_planner_command(configuration(PlannerCommand, _, _, _, _, _, _), PlannerCommand).
+configuration_domain_filename(configuration(_, DomainFilename, _, _, _, _, _), DomainFilename).
+configuration_problem_filename(configuration(_, _, ProblemFilename, _, _, _, _), ProblemFilename).
+configuration_result_filename(configuration(_, _, _, ResultFilename, _, _, _), ResultFilename).
+configuration_output_filename(configuration(_, _, _, _, OutputFilename, _, _), OutputFilename).
+configuration_nb_tests(configuration(_, _, _, _, _, NumberOfTests, _), NumberOfTests).
+configuration_generators(configuration(_, _, _, _, _, _, GeneratorsPredicates), GeneratorsPredicates).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% CONFIGURATION PREDICATES
@@ -39,22 +37,18 @@ deserialise_configuration(Filename, Configuration, RestOfFile) :-
     % grounds free variables of the configuration (in case of optional parameters)
     instantiate_optional_parameters(Configuration).
 
-json_configuration(configuration(PC, DF, PF, RF, MR, NbTests, RAT, Gen, H))
-    --> ['{'], key_string_value(command, PC), [','],
+json_configuration(configuration(PC, DF, PF, RF, OF, NbTests, Gen))
+    --> ['{'], key_string_value(planner_command, PC), [','],
         key_string_value(domain, DF), [','],
         key_string_value(problem, PF), [','],
         (key_string_value(result, RF), [','] ; []), % result filename is optional
-        key_string_value(metamorphic_relation, MR), [','],
-        (key_integer_value(number_of_tests, NbTests), [','] ; []), % number of tests optional
-        (key_boolean_value(run_all_tests, RAT), [','] ; []), % run_all_tests is optional
-        key_objects(generators, argument, Gen), [','],
-        key_object_value(heuristic, argument, H),
+        (key_string_value(output, OF), [','] ; []), % output filename is optional
+        (key_integer_value(number_of_tests, NbTests), [','] ; []), % number of tests is optional
+        key_objects(generators, argument, Gen),
         ['}'].
 
 key_string_value(Key, StringValue) --> [Key], [':'], string_value(StringValue).
 key_integer_value(Key, IntegerValue) --> [Key], [':'], integer_value(IntegerValue).
-key_boolean_value(Key, BooleanValue) --> [Key], [':'], boolean_value(BooleanValue).
-key_object_value(Key, Object, ObjectValue) --> [Key], [':'], object_value(Object, ObjectValue).
 key_objects(Key, Object, Objects) --> [Key], [':'], ['['], maybe_more(Object, Objects), [']'].
 
 object_value(ObjectName, ObjectValue, Input, Output) :-
@@ -71,8 +65,6 @@ argument(ArgumentWithoutParameter) --> ['{'], key_string_value(name, ArgumentWit
 element(Element) --> [Element].
 
 %% tokens
-boolean_value(true) --> [true].
-boolean_value(false) --> [false].
 integer_value(I) --> [I], {integer(I)}.
 string_value(V) --> [V], {integer(V), !, fail}.
 string_value(V) --> [V], {float(V), !, fail}.
@@ -87,8 +79,8 @@ instantiate_optional_parameters(Configuration) :-
     (ground(ResultFilename) -> true ; ResultFilename = 'test.csv'),
     configuration_nb_tests(Configuration, NumberOfTests),
     (ground(NumberOfTests) -> true ; NumberOfTests = 15),
-    configuration_run_all_tests(Configuration, RAT),
-    (ground(RAT) -> true ; RAT = true).
+    configuration_output_filename(Configuration, OutputFilename),
+    (ground(OutputFilename) -> true ; OutputFilename = 'tmp/output.txt').
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% PLUNIT TESTS
@@ -96,7 +88,7 @@ instantiate_optional_parameters(Configuration) :-
 
 :- begin_tests(basic_configuration).
 
-get_configuration(configuration('planner_command', 'domain_filename', 'problem_filename', 'result_filename', mr0, 42, false, [generator0(2), generator1(0,2)], heuristic0)).
+get_configuration(configuration('planner_command', 'domain_filename', 'problem_filename', 'result_filename', 'output_filename', 42, [generator0(2), generator1(0,2)])).
 
 test(planner_command_accessor, [setup(get_configuration(Config))]) :-
     configuration_planner_command(Config, 'planner_command').
@@ -110,19 +102,38 @@ test(problem_filename_accessor, [setup(get_configuration(Config))]) :-
 test(result_filename_accessor, [setup(get_configuration(Config))]) :-
     configuration_result_filename(Config, 'result_filename').
 
-test(metamorphic_relation_accessor, [setup(get_configuration(Config))]) :-
-    configuration_metamorphic_relation(Config, mr0).
+test(output_filename_accessor, [setup(get_configuration(Config))]) :-
+    configuration_output_filename(Config, 'output_filename').
 
 test(nb_tests_accessor, [setup(get_configuration(Config))]) :-
     configuration_nb_tests(Config, 42).
 
-test(run_all_tests_accessor, [setup(get_configuration(Config))]) :-
-    configuration_run_all_tests(Config, false).
-
-test(generators_accessor, [setup(get_configuration(Config))]) :-
+test(generator_accessor, [setup(get_configuration(Config))]) :-
     configuration_generators(Config, [generator0(2),generator1(0,2)]).
 
-test(heuristic_accessor, [setup(get_configuration(Config))]) :-
-    configuration_heuristic(Config, heuristic0).
-
 :- end_tests(basic_configuration).
+
+:- begin_tests(parsing_configuration).
+
+test(planner_command_accessor, [setup(deserialise_configuration('configurations/test.json', Config))]) :-
+    configuration_planner_command(Config, 'planner_command').
+
+test(domain_filename_accessor, [setup(deserialise_configuration('configurations/test.json', Config))]) :-
+    configuration_domain_filename(Config, 'domain_filename').
+
+test(problem_filename_accessor, [setup(deserialise_configuration('configurations/test.json', Config))]) :-
+    configuration_problem_filename(Config, 'problem_filename').
+
+test(result_filename_accessor, [setup(deserialise_configuration('configurations/test.json', Config))]) :-
+    configuration_result_filename(Config, 'result_filename').
+
+test(output_filename_accessor, [setup(deserialise_configuration('configurations/test.json', Config))]) :-
+    configuration_output_filename(Config, 'output_filename').
+
+test(nb_tests_accessor, [setup(deserialise_configuration('configurations/test.json', Config))]) :-
+    configuration_nb_tests(Config, 42).
+
+test(generator_accessor, [setup(deserialise_configuration('configurations/test.json', Config))]) :-
+    configuration_generators(Config, [generator(42)]).
+
+:- end_tests(parsing_configuration).

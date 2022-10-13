@@ -1,4 +1,4 @@
-:- module(pddl_parser, [parse_domain/2, parse_problem/2, deserialise_plan/2, deserialise_plans/2]).
+:- module(pddl_parser, [parse_domain/2, parse_problem/2, deserialise_plan/2, deserialise_plans/2, deserialise_states/2]).
 
 :- ensure_loaded(read_file).
 
@@ -61,6 +61,11 @@ deserialise_plans([PlanFilename|T1], [Plan|T2]) :-
     deserialise_plan(PlanFilename, Plan),
     deserialise_plans(T1, T2).
 
+deserialise_states(Filename, States) :- deserialise_states(Filename, States, []).
+deserialise_states(Filename, States, RestOfFile) :-
+    catch(read_file(Filename, List), _, List = []),
+    states_with_cost(States, List, RestOfFile).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% DCG RULES
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -118,7 +123,7 @@ require_key(constraints) --> [':', 'constraints'].
 
 types_def(L) --> ['(', ':', types], typed_list(name, L), [')'].
 
-constants_def(L) --> ['(', ':', constants], zero_or_more(name, L), [')'].
+constants_def(L) --> ['(', ':', constants], typed_list(name, L), [')'].
 
 predicates_def(P) --> ['(', ':', predicates], one_or_more(atomic_formula_skeleton, P), [')'].
 
@@ -268,6 +273,7 @@ name(N)	--> [N], {N = ')', !, fail}.
 name(N)	--> [N], {N = '(', !, fail}.
 name(N)	--> [N], {N = '?', !, fail}.
 name(N)	--> [N], {N = '-', !, fail}.
+name(N)	--> [N], {N = ',', !, fail}.
 name(N)	--> [N].
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -332,3 +338,14 @@ ipc_style_plan(Plan) --> zero_or_more(action, Plan).
 action(Action) --> ['('], action_name(N), zero_or_more(action_parameter, P), [')'], {Action =.. [N|P]}.
 action_name(Name) --> name(Name).
 action_parameter(Parameter) --> name(Parameter).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% STATES
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+facts_list([Element|Tail]) --> fact(Element), [','], facts_list(Tail).
+facts_list([Element]) --> fact(Element).
+
+states_with_cost(States) --> zero_or_more(state_with_cost, States).
+state_with_cost(State) --> number(Cost), [','], ['['], facts_list(Facts), [']'], {State = Cost-Facts}.
+fact(Fact) --> name(Name), zero_or_more(name, Variables), {Fact =.. [Name|Variables]}.
