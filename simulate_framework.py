@@ -885,15 +885,25 @@ def main_test_mutants_selection_impact():
         selection_size = random.randint(selection_min_size, nb_configurations - validation_size) # all the mutants can be not used
         to_valid = configurations[:validation_size]
         to_select = configurations[validation_size:validation_size + selection_size]
-        simulation_result_df = df_for_problems_configs(problems, to_valid, n, to_select, True) # results of the simulation of the framework
+        tmp_df = df_for_problems_configs(problems, to_valid, n, to_select, True) # results of the simulation of the framework
+        # selects only the mutant and bfs results
+        simulation_result_df = pd.concat([tmp_df.loc[tmp_df.generator==g] for g in ['mutant', 'bfs']], ignore_index=True)
         # for the random_walks generator baseline, the framework needs to be dynamically executed
-        my_args = get_arguments(to_valid, problems, n, ['walks_generator'])
-        print(f'iteration {i}: {len(my_args)} executions to be launched.')
-        pool.starmap(run_framework_prolog_planner, my_args, chunksize=3)
-        result_fps = list(map(lambda x: x[4], my_args))
-        random_walks_result_df = regroup_framework_result_dataframes(result_fps, f'results/random_walks_{i}_{validation_size}_{selection_size}.csv')
-        for result_fp in result_fps:
-            os.remove(result_fp)
+        # runs the non-deterministic results 3 times
+        random_walks_result_dfs = []
+        for j in range(3):
+            my_args = get_arguments(to_valid, problems, n, ['walks_generator'])
+            print(f'iteration {j}: {len(my_args)} executions to be launched.')
+            pool.starmap(run_framework_prolog_planner, my_args, chunksize=2)
+            result_fps = list(map(lambda x: x[4], my_args))
+            random_walks_result_df = regroup_framework_result_dataframes(result_fps)
+            random_walks_result_df.replace(to_replace={'walks_generator' : f'walks{j}'}, inplace=True)
+            random_walks_result_dfs.append(random_walks_result_df.copy())
+            for result_fp in result_fps:
+                os.remove(result_fp)
+        random_walks_result_df = pd.concat(random_walks_result_dfs, ignore_index=True)
+        random_walks_result_df.to_csv(f'results/random_walks_{i}_{validation_size}_{selection_size}.csv')
+
         result_df = pd.concat([simulation_result_df, random_walks_result_df], ignore_index=True)
         dataframe_overall_performance(result_df, f'results/efficiency_{i}_{validation_size}_{selection_size}.csv')
         dataframe_mutation_coverage(result_df, f'results/coverage_{i}_{validation_size}_{selection_size}.csv')
@@ -950,16 +960,16 @@ def main_build_random_results():
 
 def main_fd_results():
     deterministic_generators = {
-        'select_min_dist_i': 'min_dist_i',
-        'select_min_dist_g': 'min_dist_g',
-        'select_max_dist_i': 'max_dist_i',
-        'select_max_dist_g': 'max_dist_g',
+        # 'select_min_dist_i': 'min_dist_i',
+        # 'select_min_dist_g': 'min_dist_g',
+        # 'select_max_dist_i': 'max_dist_i',
+        # 'select_max_dist_g': 'max_dist_g',
         'select_bfs': 'bfs',
         'select_mutants_killers': 'mutant'
     }
-
+    problems = ['airport07', 'blocks01', 'gripper01', 'miconic02', 'miconic03', 'openstacks01', 'pegsol04', 'pegsol05', 'pegsol06', 'tpp03', 'transport01']
     # creates the cache files for all the problems considering all the mutants (as we test fast-downward planners here)
-    for problem in PROBLEMS:
+    for problem in problems:
         make_mt_cache_file_from_csv(problem, CONFIGURATIONS)
 
     # defines the fast-downward settings for testing
@@ -970,7 +980,7 @@ def main_fd_results():
     pool = multiprocessing.Pool(processes=NB_THREADS)
 
     # runs the deterministic results (once)
-    my_args = get_arguments(fd_configurations, PROBLEMS, NB_TESTS, list(deterministic_generators.keys()))
+    my_args = get_arguments(fd_configurations, problems, NB_TESTS, list(deterministic_generators.keys()))
     print(f'{len(my_args)} executions are about to be launched.')
     pool.starmap(run_framework_fd_planner, my_args, chunksize=3)
 
@@ -986,7 +996,7 @@ def main_fd_results():
 
     # runs the non-deterministic results NB_RANDOM_REPETITION times
     for i in range(NB_RANDOM_REPETITION):
-        my_args = get_arguments(fd_configurations, PROBLEMS, NB_TESTS, ['select_random', 'walks_generator'])
+        my_args = get_arguments(fd_configurations, problems, NB_TESTS, ['select_random', 'walks_generator'])
         print(f'{len(my_args)} executions are about to be launched.')
         pool.starmap(run_framework_fd_planner, my_args, chunksize=3)
         result_fps = list(map(lambda x: x[4], my_args))
@@ -1009,7 +1019,7 @@ def main_fd_results():
     result_df.to_csv(f'results/fd_results_{NB_TESTS}.csv', index=0)
     dataframe_overall_performance(result_df, f'results/fd_results_{NB_TESTS}_efficiency.csv')
     dataframe_mutation_coverage(result_df, f'results/fd_results_{NB_TESTS}_coverage.csv')
-    n_scaling_mutation_coverage(result_df, 10,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage.csv')
+    n_scaling_mutation_coverage(result_df, NB_TESTS,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage.csv')
     plot_mutation_coverage(result_df, f'results/fd_results_{NB_TESTS}_coverage.png', True)
 
 
@@ -1094,6 +1104,54 @@ def test_generators_to_average():
     # ...
 
 
+def overall_latex_chart(df, filename):
+    # df = pd.read_csv('results/final_results_20_10.csv')
+    tmp_latex = {
+        # static result keys
+        'mutant': '$S_{mut}$',
+        'min_dist_i': '$S^{min}_{i}$',
+        'min_dist_g': '$S^{min}_{g}$',
+        'max_dist_i': '$S^{max}_{i}$',
+        'max_dist_g': '$S^{max}_{g}$',
+        'bfs': '$S{0}$',
+        'walks_generator': '$R^{mean}_{walks}$',
+        'random': '$S^{mean}_{random}$'
+    }
+    # results to average detection
+    results_to_average = False
+    for g in df['generator'].unique().tolist():
+        if g[-1].isdigit():
+            results_to_average = True
+            break
+    generators = [g for g in df['generator'].unique().tolist() if not g[-1].isdigit()]
+    if results_to_average:
+        generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
+
+    scores = []
+    yerr = []
+    for g in generators:
+        g_df = df.loc[df.generator==g]
+        g_scores = [100 * len(g_df.loc[(g_df.failure==1) & (g_df.problem==p)]) / len(g_df.loc[g_df.problem==p]) if not g_df.loc[g_df.problem==p].empty else 0 for p in PROBLEMS]
+        scores.append(np.mean(g_scores))
+        yerr.append(np.std(g_scores))
+    if results_to_average:
+        for g in generators_to_average:
+            g_scores = []
+            for p in PROBLEMS:
+                p_df = df.loc[df.problem==p]
+                i_scores = [100 * len(p_df.loc[(p_df.generator==f'{g}{i}') & (p_df.failure==1)]) / len(p_df.loc[p_df.generator==f'{g}{i}']) if not p_df.loc[p_df.generator==f'{g}{i}'].empty else 0 for i in range(NB_RANDOM_REPETITION)]
+                g_scores.append(np.mean(i_scores))
+            scores.append(np.mean(g_scores))
+            yerr.append(np.std(g_scores))
+            generators.append(g)
+    _, ax = plt.subplots()
+    bar = ax.bar(generators, scores, yerr=yerr)
+    ax.bar_label(bar)
+    ax.set_xticks(ticks=np.arange(len(generators)), labels=[tmp_latex[g] for g in generators])
+    ax.set_ylabel('Average efficiency score [%]')
+    plt.savefig(filename, dpi=150)
+
+
 # exec(open('simulate_framework.py').read())
 if __name__ == '__main__':
     if 'main.exe' not in os.listdir():
@@ -1101,3 +1159,80 @@ if __name__ == '__main__':
     print(f'source_results_costs: {len(source_results_costs)}.')
     print(f'number of problems: {len(PROBLEMS)}')
     print(f'number of configurations: {len(CONFIGURATIONS)}')
+
+    # main_fd_results()
+    main_test_mutants_selection_impact()
+
+    # df = pd.read_csv('deterministic_fd_results_10.csv')
+    # n_max = 10
+    # filename = 'caca2.tex'
+    # # results to average detection
+    # results_to_average = False
+    # for g in df['generator'].unique().tolist():
+    #     if g[-1].isdigit():
+    #         results_to_average = True
+    #         break
+    # generators = [g for g in df['generator'].unique().tolist() if not g[-1].isdigit()]
+    # planners = df['planner'].unique().tolist()
+    # problems = df['problem'].unique().tolist()
+    # if results_to_average:
+    #     generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
+    # d = {}
+    # nb_mutants = len(planners)
+    # for generator in generators:
+    #     g_df = df.loc[df.generator==generator]
+    #     d[generator] = []
+    #     for n in range(1, n_max + 1):
+    #         scores = []
+    #         for problem in problems:
+    #             p_df = g_df.loc[g_df.problem==problem]
+    #             nb_mutants_killed = 0
+    #             for planner in planners:
+    #                 n_df = p_df.loc[p_df.planner==planner].head(n)
+    #                 if not n_df.empty:
+    #                     nb_mutants_killed += 1 if not n_df.loc[n_df.failure==1].empty else 0
+    #             scores.append(100 * nb_mutants_killed / nb_mutants)
+    #         d[generator].append(np.mean(scores))
+    # if results_to_average:
+    #     for g in generators_to_average:
+    #         d[g] = []
+    #         for n in range(1, n_max + 1):
+    #             scores = []
+    #             for problem in problems:
+    #                 problem_df = df.loc[df.problem==problem]
+    #                 score = []
+    #                 for i in range(NB_RANDOM_REPETITION):
+    #                     gen_df = problem_df.loc[problem_df.generator==f'{g}{i}']
+    #                     nb_mutants_killed = 0
+    #                     for planner in planners:
+    #                         n_df = gen_df.loc[gen_df.planner==planner].head(n)
+    #                         if not n_df.empty:
+    #                             nb_mutants_killed += 1 if not n_df.loc[n_df.failure==1].empty else 0
+    #                     score.append(100 * nb_mutants_killed / nb_mutants)
+    #                 scores.append(np.mean(score))
+    #             d[g].append(np.mean(scores))
+    # if results_to_average:
+    #     for g in generators_to_average:
+    #         generators.append(g)
+    # res_df = pd.DataFrame(data=d, index=[i for i in range(n_max)])
+    # if filename != None:
+    #     if filename.endswith('.tex'):
+    #         pd.DataFrame(data=d, index=[i for i in range(n_max)]).to_latex(filename, float_format='{:0.1f}\%'.format, header=[GENERATORS_LATEX[g] for g in generators], escape=False)
+    #     elif filename.endswith('.csv'):
+    #         pd.DataFrame(data=d, index=[i for i in range(n_max)]).to_csv(filename, index_label='N')
+    #     else:
+    #         print('filename extension not supported.')
+
+
+    # nb_experiments = 20
+    # n = 10
+    # efficiency_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('efficiency') and f.endswith('.csv')]
+    # coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('coverage') and f.endswith('.csv')]
+    # n_scaling_mutation_coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('n_scaling_mutation_coverage') and f.endswith('.csv')]
+    # result_fps = [f'results/{f}' for f in os.listdir('results') if f.split('.')[0].isnumeric() and f.endswith('.csv')]
+    # merge_result_dataframe_latex(efficiency_fps, f'efficiency_{nb_experiments}_{n}.tex')
+    # merge_result_dataframe_latex(coverage_fps, f'coverage_{nb_experiments}_{n}.tex')
+    # merge_n_scaling_result_dataframe_latex(n_scaling_mutation_coverage_fps, f'n_scaling_mutation_coverage_{nb_experiments}_{n}.tex')
+    # final_result_df = pd.concat([pd.read_csv(result_fp) for result_fp in result_fps], ignore_index=True)
+    # final_result_df.to_csv(f'results/final_results_{nb_experiments}_{n}.csv', index=0)
+    # plot_overall_performance(final_result_df, f'overall_efficiency_{nb_experiments}_{n}.png')
