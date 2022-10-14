@@ -27,39 +27,19 @@ source_results_costs = {}
 CONFIGURATIONS = [('f5', 'hi'), ('f5', 'hlength'), ('f5', 'hnba'), ('f2', 'hdiff'), ('f2', 'hlength'), ('f2', 'hnba'), ('f4', 'hg'), ('f4', 'hdiff'), ('f4', 'hi'), ('f4', 'hlength'), ('f4', 'hmax'), ('f4', 'hnba'), ('f3', 'hg'), ('f3', 'hdiff'), ('f3', 'hi'), ('f3', 'hlength'), ('f3', 'hmax'), ('f3', 'hnba'), ('f6', 'hg'), ('f6', 'hi'), ('f6', 'hlength'), ('f6', 'hnba')]
 PLANNERS = [f'{s}_{h}' for (s, h) in CONFIGURATIONS]
 PROBLEM_REGEX = re.compile('(.+)(\d\d)')
-DETERMINISTIC_STATIC_GENERATORS = ['min_dist_i', 'min_dist_g', 'max_dist_i', 'max_dist_g', 'bfs']
-DETERMINISTIC_GENERATORS = ['min_dist_i', 'min_dist_g', 'max_dist_i', 'max_dist_g', 'bfs', 'mutant', 'select_mutants_killers']
-GENERATORS = {
-    # static result keys
-    'bfs': 'bfs',
-    'min_dist_i': 'min_i',
-    'min_dist_g': 'min_g',
-    'max_dist_i': 'max_i',
-    'max_dist_g': 'max_g',
-    'random': 'random',
-    'mutant': 'mut',
-    # dynamic result keys
-    'select_mutants_killers': 'mut',
-    'walks_generator': 'walks',
-    'select_random': 'random',
-    'walks': 'walks'
-}
 GENERATORS_LATEX = {
     # static result keys
-    'mutant': '$Select_{mutant}$',
-    'min_dist_i': '$Select^{min}_{i}$',
-    'min_dist_g': '$Select^{min}_{g}$',
-    'max_dist_i': '$Select^{max}_{i}$',
-    'max_dist_g': '$Select^{max}_{g}$',
-    'bfs': '$Select_{0}$',
-    'random': '$Select^{mean}_{random}$',
-    'random_std': '$Select^{std}_{random}$',
+    'mutant': '$S_{mut}$',
+    'bfs': '$S_{0}$',
+    'random': '$S^{mean}_{random}$',
+    'random_std': '$S^{std}_{random}$',
     # dynamic result keys
-    'walks_generator': '$R^{mean}_{walks}$', # main_test_mutants_selection_impact
     'walks': '$R^{mean}_{walks}$', # main_fd_results
     'walks_std': '$R^{std}_{walks}$' # main_fd_results
 }
-NB_RANDOM_REPETITION = 10
+DETERMINISTIC_STATIC_GENERATORS = ['bfs'] # ['min_dist_i', 'min_dist_g', 'max_dist_i', 'max_dist_g', 'bfs', 'mutant', 'select_mutants_killers']
+NB_RANDOM_WALKS_REPETITIONS = 3
+NB_RANDOM_REPETITIONS = 10
 NB_TESTS = 10
 NB_THREADS = 3
 NO_DIGIT_REGEX = re.compile('(\D+)')
@@ -284,7 +264,7 @@ def result_problem_configs_random(problem:str, configurations: list[tuple[str, s
         config_df = df.loc[(df.search==configuration[0]) & (df.heuristic==configuration[1])]
         # sub_gen_dfs contains the results of all generators for the configuration
         sub_gen_dfs = []
-        for i in range(NB_RANDOM_REPETITION):
+        for i in range(NB_RANDOM_REPETITIONS):
             # the framework sets its random seed on time; so it waits a bit between each repetition
             time.sleep(1.0)
             nodes_indexes = simulate_framework(domain_fp, problem_fp, n, 'random', source_result_cost)
@@ -403,21 +383,26 @@ def df_for_problems_configs(problems: list[str], valid_configs: list[tuple[str, 
 def merge_result_dataframe_latex(filepaths: list[str], filename: str) -> None:
     """
     Merges the result dataframes from filepaths parameter and exports their average values in .tex file.
-    The dataframes are expected to be outputs from either dataframe_mutation_coverage or dataframe_overall_performance function.
+    The dataframes are expected to be outputs from either dataframe_mutation_coverage function.
     It proceeds as follows:
         - The mean values as well as the standard deviations are computed seperately.
         - Each cell is then rendered as mean+/-std with latex styling.
     """
     df = pd.concat([pd.read_csv(filepath) for filepath in filepaths], ignore_index=True)
-    df_mean = df.groupby(['planner'], sort=False).mean()
-    df_std = df.groupby(['planner'], sort=False).std()
-    planners = df['planner'].unique().tolist()
+    df_mean = df.groupby(['problem'], sort=False).mean()
+    df_std = df.groupby(['problem'], sort=False).std()
+    problems = [p for p in df['problem'].unique().tolist() if p != 'mean']
     columns = df_mean.columns
-    # data = {planner: [f'{df_mean.at[planner, c]:.1f}$\pm${df_std.at[planner, c]:.1f}' if df_mean.at[planner, c] != max(df_mean.loc[planner]) else f'\textbf{{{df_mean.at[planner, c]:.1f}$\pm${df_std.at[planner, c]:.1f}}}' for c in columns] for planner in planners}
     data = {}
-    for planner in planners:
-        max_value = max(df_mean.loc[planner])
-        data[planner] = [f'{df_mean.at[planner, c]:.1f}$\pm${df_std.at[planner, c]:.1f}' if df_mean.at[planner, c] != max_value else f'\textbf{{{df_mean.at[planner, c]:.1f}$\pm${df_std.at[planner, c]:.1f}}}' for c in columns]
+    for problem in problems:
+        max_value = max(df_mean.loc[problem])
+        # each cell is the average of the means with the standard deviation
+        data[problem] = [f'{df_mean.at[problem, c]:.1f}$\pm${df_std.at[problem, c]:.1f}' if df_mean.at[problem, c] != max_value else f'\textbf{{{df_mean.at[problem, c]:.1f}$\pm${df_std.at[problem, c]:.1f}}}' for c in columns]
+    # for the mean line, each cell is the average of the previous means with the related standard deviation
+    problem = 'mean'
+    max_value = max(df_mean.loc[problem])
+    data['mean'] = [f'{df_mean.at[problem, c]:.1f}$\pm${np.std(df_mean[c].head(len(problems))):.1f}' if df_mean.at[problem, c] != max_value else f'\textbf{{{df_mean.at[problem, c]:.1f}$\pm${np.std(df_mean[c].head(len(problems))):.1f}}}' for c in columns]
+
     df = pd.DataFrame.from_dict(data, orient='index', columns=[GENERATORS_LATEX[c] for c in columns])
     df.to_latex(filename, escape=False)
 
@@ -425,18 +410,18 @@ def merge_result_dataframe_latex(filepaths: list[str], filename: str) -> None:
 def merge_n_scaling_result_dataframe_latex(filepaths: list[str], filename: str) -> None:
     """
     Merges the result dataframes from filepaths parameter and exports their average values in .tex file.
-    The dataframes are expected to be outputs from either n_scaling_overall_performance or n_scaling_mutation_coverage function.
+    The dataframes are expected to be outputs from the n_scaling_mutation_coverage function.
     It proceeds as follows:
         - The mean values as well as the standard deviations are computed seperately.
         - Each cell is then rendered as mean+/-std with latex styling.
     """
     df = pd.concat([pd.read_csv(filepath) for filepath in filepaths], ignore_index=True)
-    generators = df['generator'].unique().tolist()
-    df_mean = df.groupby(['generator'], sort=False).mean()
-    df_std = df.groupby(['generator'], sort=False).std()
-    columns = df_mean.columns
-    data = {GENERATORS_LATEX[generator]: [f'{df_mean.at[generator, c]:.1f}$\pm${df_std.at[generator, c]:.1f}' for c in columns] for generator in generators}
-    df = pd.DataFrame.from_dict(data, orient='index', columns=[f'$N_{{{c}}}$' for c in columns])
+    n_values = df['N'].unique().tolist()
+    df_mean = df.groupby(['N'], sort=False).mean()
+    df_std = df.groupby(['N'], sort=False).std()
+    generators = [c for c in df_mean.columns if c != 'N']
+    data = {f'$N_{{{n}}}$': [f'{df_mean.at[n, g]:.1f}$\pm${df_std.at[n, g]:.1f}' for g in generators] for n in n_values}
+    df = pd.DataFrame.from_dict(data, orient='index', columns=[GENERATORS_LATEX[g] for g in generators])
     df.to_latex(filename, escape=False)
 
 
@@ -476,7 +461,7 @@ def regroup_framework_result_dataframes(filepaths: list[str], filename: str=None
 ############################################################## MUTATION COVERAGE #####################################################################
 
 
-def plot_mutation_coverage(df: pd.DataFrame, filename: str, in_percentage: bool=False) -> None:
+def plot_mutation_coverage(df: pd.DataFrame, filename: str) -> None:
     """
     Saves a chart that reports either the percentage of killed mutants or their (raw) number for each solution on each problem.
     It works well with results to average.
@@ -494,6 +479,7 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str, in_percentage: bool=
     scores = {g: [] for g in generators}
     if results_to_average:
         generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
+        nb_repetitions = {g: len([x for x in df['generator'].unique().tolist() if x.startswith(g) and x[-1].isdigit()]) for g in generators_to_average}
         for generator_to_average in generators_to_average:
             scores[generator_to_average] = []
     for problem in problems:
@@ -515,11 +501,12 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str, in_percentage: bool=
                             score += 1
                     else:
                         print(f'no data for {problem} {generator} {planner}')
-                scores[generator].append(score if not in_percentage else 100 * score / nb_planners)
+                scores[generator].append(100 * score / nb_planners)
         if results_to_average:
             for g in generators_to_average:
+                nb_repetition = nb_repetitions[g]
                 g_scores = []
-                for i in range(NB_RANDOM_REPETITION):
+                for i in range(nb_repetition):
                     generator = f'{g}{i}'
                     generator_df = problem_df.loc[problem_df.generator==generator]
                     if generator_df.empty:
@@ -536,7 +523,7 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str, in_percentage: bool=
                                     score += 1
                             else:
                                 print(f'no data for {problem} {generator} {planner}')
-                        g_scores.append(score if not in_percentage else 100 * score / nb_planners)
+                        g_scores.append(100 * score / nb_planners)
                 scores[g].append(np.mean(g_scores) if g_scores != [] else 0) # [] means no data
     # removing unrelevant data
     relevant_problems = []
@@ -553,21 +540,20 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str, in_percentage: bool=
             scores[g] = np.delete(scores[g], indexes_to_remove).tolist()
     # plotting
     _, ax = plt.subplots()
-    bar_width = 0.08
+    bar_width = 0.1
     x = np.arange(len(relevant_problems))
     gens = list(scores.keys()) # gens should include 'random' if necessary
     for i in range(len(gens)):
         generator = gens[i]
         x_offset = (i - len(gens) / 2) * bar_width + bar_width / 2
-        ax.bar(x + x_offset, scores[generator], width=bar_width, label=GENERATORS[generator])
+        ax.bar(x + x_offset, scores[generator], width=bar_width, label=GENERATORS_LATEX[generator])
     ax.set_xticks(x)
     ax.set_xticklabels(relevant_problems, rotation=30)
-    ax.set_ylabel(f'{"Number" if not in_percentage else "Percentage"} of mutants killed')
-    ax.set_title(f'{"Number" if not in_percentage else "Percentage"} of mutants killed on each problem for each solution')
-    ax.legend(loc='upper right')
+    ax.set_ylabel('Mutation score [%]')
+    ax.legend(loc='upper left')
 
     # puts a legend to the right of the current axis
-    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    # ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
     plt.tight_layout()
     plt.savefig(filename, dpi=200)
@@ -592,6 +578,7 @@ def dataframe_mutation_coverage(df: pd.DataFrame, filename: str=None) -> pd.Data
     scores = {g: [] for g in generators}
     if results_to_average:
         generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
+        nb_repetitions = {g: len([x for x in df['generator'].unique().tolist() if x.startswith(g) and x[-1].isdigit()]) for g in generators_to_average}
         for generator_to_average in generators_to_average:
             scores[generator_to_average] = []
             scores[f'{generator_to_average}_std'] = []
@@ -617,8 +604,9 @@ def dataframe_mutation_coverage(df: pd.DataFrame, filename: str=None) -> pd.Data
                 scores[generator].append(100 * score / nb_planners)
         if results_to_average:
             for g in generators_to_average:
+                nb_repetition = nb_repetitions[g]
                 g_scores = []
-                for i in range(NB_RANDOM_REPETITION):
+                for i in range(nb_repetition):
                     generator = f'{g}{i}'
                     generator_df = problem_df.loc[problem_df.generator==generator]
                     if generator_df.empty:
@@ -638,14 +626,13 @@ def dataframe_mutation_coverage(df: pd.DataFrame, filename: str=None) -> pd.Data
                         g_scores.append(100 * score / nb_planners)
                 scores[g].append(np.mean(g_scores) if g_scores != [] else 0) # [] means no data
                 scores[f'{g}_std'].append(np.std(g_scores) if g_scores != [] else 0) # [] means no data
-    # d = {g: [100 * len(df.loc[(df.failure==1) & (df.generator==g) & (df.problem==p)]['planner'].unique().tolist()) / len(df['planner'].unique().tolist()) for p in df['problem'].unique().tolist()] for g in df['generator'].unique().tolist()}
     df = pd.DataFrame(data=scores, index=problems)
     df.loc['mean'] = [df[c].mean() for c in df.columns]
     if filename != None:
         if filename.endswith('.tex'):
             df.to_latex(filename, float_format='{:0.1f}\%'.format, header=[GENERATORS_LATEX[c] for c in df.columns], escape=False)
         elif filename.endswith('.csv'):
-            df.to_csv(filename, index_label='planner')
+            df.to_csv(filename, index_label='problem')
         else:
             print('filename extension not supported.')
     return df
@@ -669,131 +656,42 @@ def plot_overall_performance(df: pd.DataFrame, filename: str) -> None:
     generators = [g for g in df['generator'].unique().tolist() if not g[-1].isdigit()]
     if results_to_average:
         generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
+        nb_repetitions = {g: len([x for x in df['generator'].unique().tolist() if x.startswith(g) and x[-1].isdigit()]) for g in generators_to_average}
 
-    scores = [100 * len(df.loc[(df.generator==g) & (df.failure==1)]) / len(df.loc[df.generator==g]) if not df.loc[df.generator==g].empty else 0 for g in generators]
-
+    scores = []
+    yerr = []
+    for g in generators:
+        g_df = df.loc[df.generator==g]
+        g_scores = [100 * len(g_df.loc[(g_df.failure==1) & (g_df.problem==p)]) / len(g_df.loc[g_df.problem==p]) if not g_df.loc[g_df.problem==p].empty else 0 for p in PROBLEMS]
+        scores.append(np.mean(g_scores))
+        yerr.append(np.std(g_scores))
     if results_to_average:
-        yerr = [0.0 for _ in range(len(generators))]
         for g in generators_to_average:
-            g_scores = [100 * len(df.loc[(df.generator==f'{g}{i}') & (df.failure==1)]) / len(df.loc[df.generator==f'{g}{i}']) if not df.loc[df.generator==f'{g}{i}'].empty else 0 for i in range(NB_RANDOM_REPETITION)]
+            nb_repetition = nb_repetitions[g]
+            g_scores = []
+            for p in PROBLEMS:
+                p_df = df.loc[df.problem==p]
+                i_scores = [100 * len(p_df.loc[(p_df.generator==f'{g}{i}') & (p_df.failure==1)]) / len(p_df.loc[p_df.generator==f'{g}{i}']) if not p_df.loc[p_df.generator==f'{g}{i}'].empty else 0 for i in range(nb_repetition)]
+                g_scores.append(np.mean(i_scores))
             scores.append(np.mean(g_scores))
             yerr.append(np.std(g_scores))
             generators.append(g)
     _, ax = plt.subplots()
-    bar = ax.bar(generators, scores, yerr=yerr if results_to_average else None)
+    bar = ax.bar(generators, scores, yerr=yerr)
     ax.bar_label(bar)
-    ax.set_xticks(ticks=np.arange(len(generators)), labels=[GENERATORS[g] for g in generators])
-
-    plt.title('Percentage of follow-up test cases that detects non-optimal planning')
-    plt.savefig(filename, dpi=100)
-
-
-def dataframe_overall_performance(df: pd.DataFrame, filename: str=None) -> pd.DataFrame:
-    """
-    Computes the overall efficiency on the input dataframe and returns its result as a new one. Columns are the generators and each row is a problem.
-    The mean is added at the end of the table. It works well with results to average.
-    Depending on the extension of the filename parameter, it exports either the dataframe (.csv file) or its table representation (.tex file).
-    """
-    # results to average detection
-    results_to_average = False
-    for g in df['generator'].unique().tolist():
-        if g[-1].isdigit():
-            results_to_average = True
-            break
-    generators = [g for g in df['generator'].unique().tolist() if not g[-1].isdigit()]
-    problems = df['problem'].unique().tolist()
-    scores = {g: [] for g in generators}
-    if results_to_average:
-        generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
-        for generator_to_average in generators_to_average:
-            scores[generator_to_average] = []
-            scores[f'{generator_to_average}_std'] = []
-    for problem in problems:
-        problem_df = df.loc[df.problem==problem]
-        [scores[g].append(100 * len(problem_df.loc[(problem_df.generator==g) & (problem_df.failure==1)]) / len(problem_df.loc[problem_df.generator==g]) if not problem_df.loc[problem_df.generator==g].empty else np.nan) for g in generators]
-        if results_to_average:
-            for g in generators_to_average:
-                g_scores = [100 * len(problem_df.loc[(problem_df.generator==f'{g}{i}') & (problem_df.failure==1)]) / len(problem_df.loc[problem_df.generator==f'{g}{i}']) if not problem_df.loc[problem_df.generator==f'{g}{i}'].empty else 0 for i in range(NB_RANDOM_REPETITION)]
-                scores[g].append(np.nanmean(g_scores))
-                scores[f'{g}_std'].append(np.nanstd(g_scores))
-    df = pd.DataFrame(data=scores, index=problems)
-    df.loc['mean'] = [df[c].mean() for c in df.columns]
-    if filename != None:
-        if filename.endswith('.tex'):
-            df.to_latex(filename, float_format='{:0.1f}\%'.format, header=[GENERATORS_LATEX[c] for c in df.columns], escape=False)
-        elif filename.endswith('.csv'):
-            df.to_csv(filename, index_label='planner')
-        else:
-            print('filename extension not supported.')
-    return df
+    ax.set_xticks(ticks=np.arange(len(generators)), labels=[GENERATORS_LATEX[g] for g in generators])
+    ax.set_ylabel('Average efficiency score [%]')
+    plt.savefig(filename, dpi=200)
 
 
 ######################################################################################################################################################
 ############################################################## N SCALING #############################################################################
 
 
-def n_scaling_overall_performance(df: pd.DataFrame, n_max: int, filename: str=None) -> pd.DataFrame:
-    """
-    Computes the evolution of the overall efficiency with respect to the number of follow-up test cases N on the input dataframe and returns its result as a new one.
-    The scaling goes from 1 to n_max parameter. The results are shown in ascending order on the columns and each row is thus a generator.
-    It works well with results to average.
-    Depending on the extension of the filename parameter, it exports either the dataframe (.csv file) or its table representation (.tex file).
-    """
-    # results to average detection
-    results_to_average = False
-    for g in df['generator'].unique().tolist():
-        if g[-1].isdigit():
-            results_to_average = True
-            break
-    generators = [g for g in df['generator'].unique().tolist() if not g[-1].isdigit()]
-    planners = df['planner'].unique().tolist()
-    problems = df['problem'].unique().tolist()
-    if results_to_average:
-        generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
-    d = {}
-    # print(f'{len(planners) * len(problems)} scores expected for each generator.')
-    for n in range(1, n_max + 1):
-        d[n] = []
-        for generator in generators:
-            g_df = df.loc[df.generator==generator]
-            scores = []
-            for planner in planners:
-                p_df = g_df.loc[g_df.planner==planner]
-                for problem in problems:
-                    # simulates results got with the current n: the dataframe has to be reduced step by step until finally ba able to use head() function
-                    n_df = p_df.loc[p_df.problem==problem].head(n)
-                    if not n_df.empty:
-                        scores.append(100 * len(n_df.loc[n_df.failure==1]) / len(n_df))
-            # print(f'{len(scores)} for generator {generator}')
-            d[n].append(np.mean(scores))
-        if results_to_average:
-            for g in generators_to_average:
-                scores = []
-                for planner in planners:
-                    planner_df = df.loc[df.planner==planner]
-                    for problem in problems:
-                        p_df = planner_df.loc[planner_df.problem==problem]
-                        n_dfs = [p_df.loc[p_df.generator==f'{g}{i}'].head(n) for i in range(NB_RANDOM_REPETITION)]
-                        score = np.nanmean([100 * len(n_df.loc[n_df.failure==1]) / len(n_df) if not n_df.empty else np.nan for n_df in n_dfs])
-                        scores.append(score)
-                d[n].append(np.mean(scores))
-    if results_to_average:
-        for g in generators_to_average:
-            generators.append(g)
-    if filename != None:
-        if filename.endswith('.tex'):
-            pd.DataFrame(data=d, index=[GENERATORS_LATEX[g] for g in generators]).to_latex(filename, float_format='{:0.1f}\%'.format, header=[f'$N_{{{i}}}$' for i in range(1, n_max + 1)], escape=False)
-        elif filename.endswith('.csv'):
-            pd.DataFrame(data=d, index=generators).to_csv(filename, index_label='generator')
-        else:
-            print('filename extension not supported.')
-    return pd.DataFrame(data=d, index=generators)
-
-
 def n_scaling_mutation_coverage(df: pd.DataFrame, n_max: int, filename: str=None) -> pd.DataFrame:
     """
     Computes the evolution of the mutation coverage with respect to the number of follow-up test cases on the input dataframe and returns its result as a new one.
-    The scaling goes from 1 to n_max parameter. The results are shown in ascending order on the columns and each row is thus a generator.
+    The scaling goes from 1 to n_max parameter. The results are shown in ascending order as index and columns are thus the generators.
     It works well with results to average.
     Depending on the extension of the filename parameter, it exports either the dataframe (.csv file) or its table representation (.tex file).
     """
@@ -808,12 +706,13 @@ def n_scaling_mutation_coverage(df: pd.DataFrame, n_max: int, filename: str=None
     problems = df['problem'].unique().tolist()
     if results_to_average:
         generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
+        nb_repetitions = {g: len([x for x in df['generator'].unique().tolist() if x.startswith(g) and x[-1].isdigit()]) for g in generators_to_average}
     d = {}
     nb_mutants = len(planners)
-    for n in range(1, n_max + 1):
-        d[n] = []
-        for generator in generators:
-            g_df = df.loc[df.generator==generator]
+    for generator in generators:
+        g_df = df.loc[df.generator==generator]
+        d[generator] = []
+        for n in range(1, n_max + 1):
             scores = []
             for problem in problems:
                 p_df = g_df.loc[g_df.problem==problem]
@@ -823,14 +722,17 @@ def n_scaling_mutation_coverage(df: pd.DataFrame, n_max: int, filename: str=None
                     if not n_df.empty:
                         nb_mutants_killed += 1 if not n_df.loc[n_df.failure==1].empty else 0
                 scores.append(100 * nb_mutants_killed / nb_mutants)
-            d[n].append(np.mean(scores))
-        if results_to_average:
-            for g in generators_to_average:
+            d[generator].append(np.mean(scores))
+    if results_to_average:
+        for g in generators_to_average:
+            nb_repetition = nb_repetitions[g]
+            d[g] = []
+            for n in range(1, n_max + 1):
                 scores = []
                 for problem in problems:
                     problem_df = df.loc[df.problem==problem]
                     score = []
-                    for i in range(NB_RANDOM_REPETITION):
+                    for i in range(nb_repetition):
                         gen_df = problem_df.loc[problem_df.generator==f'{g}{i}']
                         nb_mutants_killed = 0
                         for planner in planners:
@@ -839,18 +741,34 @@ def n_scaling_mutation_coverage(df: pd.DataFrame, n_max: int, filename: str=None
                                 nb_mutants_killed += 1 if not n_df.loc[n_df.failure==1].empty else 0
                         score.append(100 * nb_mutants_killed / nb_mutants)
                     scores.append(np.mean(score))
-                d[n].append(np.mean(scores))
+                d[g].append(np.mean(scores))
     if results_to_average:
         for g in generators_to_average:
             generators.append(g)
+    res_df = pd.DataFrame(data=d, index=[i for i in range(1, n_max + 1)])
     if filename != None:
         if filename.endswith('.tex'):
-            pd.DataFrame(data=d, index=[GENERATORS_LATEX[g] for g in generators]).to_latex(filename, float_format='{:0.1f}\%'.format, header=[f'$N_{{{i}}}$' for i in range(1, n_max + 1)], escape=False)
+            pd.DataFrame(data=d, index=[f'$N_{{{i}}}$' for i in range(1, n_max + 1)]).to_latex(filename, float_format='{:0.1f}\%'.format, header=[GENERATORS_LATEX[g] for g in generators], escape=False)
         elif filename.endswith('.csv'):
-            pd.DataFrame(data=d, index=generators).to_csv(filename, index_label='generator')
+            res_df.to_csv(filename, index_label='N')
+        elif filename.endswith('.png'):
+            # plotting
+            _, ax = plt.subplots()
+            x = [i for i in range(1, n_max + 1)]
+            gens = list(d.keys())
+            for i in range(len(gens)):
+                generator = gens[i]
+                ax.plot(x, d[generator], label=GENERATORS_LATEX[generator])
+            ax.set_xlabel('$N_{max}$')
+            ax.set_ylabel('Average mutation score [%]')
+            ax.legend(loc='upper left')
+
+            ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=len(gens), fancybox=True, shadow=True)
+            plt.tight_layout()
+            plt.savefig(filename, dpi=200)
         else:
             print('filename extension not supported.')
-    return pd.DataFrame(data=d, index=generators)
+    return res_df
 
 
 ######################################################################################################################################################
@@ -885,13 +803,11 @@ def main_test_mutants_selection_impact():
         selection_size = random.randint(selection_min_size, nb_configurations - validation_size) # all the mutants can be not used
         to_valid = configurations[:validation_size]
         to_select = configurations[validation_size:validation_size + selection_size]
-        tmp_df = df_for_problems_configs(problems, to_valid, n, to_select, True) # results of the simulation of the framework
-        # selects only the mutant and bfs results
-        simulation_result_df = pd.concat([tmp_df.loc[tmp_df.generator==g] for g in ['mutant', 'bfs']], ignore_index=True)
+        simulation_result_df = df_for_problems_configs(problems, to_valid, n, to_select, True) # results of the simulation of the framework
         # for the random_walks generator baseline, the framework needs to be dynamically executed
         # runs the non-deterministic results 3 times
         random_walks_result_dfs = []
-        for j in range(3):
+        for j in range(NB_RANDOM_WALKS_REPETITIONS):
             my_args = get_arguments(to_valid, problems, n, ['walks_generator'])
             print(f'iteration {j}: {len(my_args)} executions to be launched.')
             pool.starmap(run_framework_prolog_planner, my_args, chunksize=2)
@@ -905,16 +821,13 @@ def main_test_mutants_selection_impact():
         random_walks_result_df.to_csv(f'results/random_walks_{i}_{validation_size}_{selection_size}.csv')
 
         result_df = pd.concat([simulation_result_df, random_walks_result_df], ignore_index=True)
-        dataframe_overall_performance(result_df, f'results/efficiency_{i}_{validation_size}_{selection_size}.csv')
         dataframe_mutation_coverage(result_df, f'results/coverage_{i}_{validation_size}_{selection_size}.csv')
         n_scaling_mutation_coverage(result_df, 10,  f'results/n_scaling_mutation_coverage_{i}_{validation_size}_{selection_size}.csv')
         result_df.to_csv( f'results/result_{i}_{validation_size}_{selection_size}.csv', index=0)
 
-    efficiency_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('efficiency') and f.endswith('.csv')]
     coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('coverage') and f.endswith('.csv')]
     n_scaling_mutation_coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('n_scaling_mutation_coverage') and f.endswith('.csv')]
     result_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('result') and f.endswith('.csv')]
-    merge_result_dataframe_latex(efficiency_fps, f'efficiency_{nb_experiments}_{n}.tex')
     merge_result_dataframe_latex(coverage_fps, f'coverage_{nb_experiments}_{n}.tex')
     merge_n_scaling_result_dataframe_latex(n_scaling_mutation_coverage_fps, f'n_scaling_mutation_coverage_{nb_experiments}_{n}.tex')
     final_result_df = pd.concat([pd.read_csv(result_fp) for result_fp in result_fps], ignore_index=True)
@@ -960,13 +873,10 @@ def main_build_random_results():
 
 def main_fd_results():
     deterministic_generators = {
-        # 'select_min_dist_i': 'min_dist_i',
-        # 'select_min_dist_g': 'min_dist_g',
-        # 'select_max_dist_i': 'max_dist_i',
-        # 'select_max_dist_g': 'max_dist_g',
         'select_bfs': 'bfs',
         'select_mutants_killers': 'mutant'
     }
+    #TODO: removes this shortcut!
     problems = ['airport07', 'blocks01', 'gripper01', 'miconic02', 'miconic03', 'openstacks01', 'pegsol04', 'pegsol05', 'pegsol06', 'tpp03', 'transport01']
     # creates the cache files for all the problems considering all the mutants (as we test fast-downward planners here)
     for problem in problems:
@@ -994,8 +904,8 @@ def main_fd_results():
         os.remove(result_fp)
     result_dfs.append(deterministic_result_df)
 
-    # runs the non-deterministic results NB_RANDOM_REPETITION times
-    for i in range(NB_RANDOM_REPETITION):
+    # runs the non-deterministic results NB_RANDOM_REPETITIONS times
+    for i in range(NB_RANDOM_REPETITIONS):
         my_args = get_arguments(fd_configurations, problems, NB_TESTS, ['select_random', 'walks_generator'])
         print(f'{len(my_args)} executions are about to be launched.')
         pool.starmap(run_framework_fd_planner, my_args, chunksize=3)
@@ -1004,7 +914,7 @@ def main_fd_results():
         for result_fp in result_fps:
             os.remove(result_fp)
     # regroups the non-deterministic results
-    for i in range(NB_RANDOM_REPETITION):
+    for i in range(NB_RANDOM_REPETITIONS):
         random_result_fp = f'results/random_{i}_fd_results_{NB_TESTS}.csv'
         random_result_df = pd.read_csv(random_result_fp)
         # post-processes the results by renaming the names of the generator (more handier result mining and presentation)
@@ -1017,139 +927,13 @@ def main_fd_results():
     result_df = pd.concat(result_dfs, ignore_index=True)
     # saves the final result dataframe for safety, as it can then be used with plot_overall_performance() for example
     result_df.to_csv(f'results/fd_results_{NB_TESTS}.csv', index=0)
-    dataframe_overall_performance(result_df, f'results/fd_results_{NB_TESTS}_efficiency.csv')
     dataframe_mutation_coverage(result_df, f'results/fd_results_{NB_TESTS}_coverage.csv')
     n_scaling_mutation_coverage(result_df, NB_TESTS,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage.csv')
-    plot_mutation_coverage(result_df, f'results/fd_results_{NB_TESTS}_coverage.png', True)
+    plot_mutation_coverage(result_df, f'results/fd_results_{NB_TESTS}_coverage.png')
 
 
 ######################################################################################################################################################
 ############################################################## USED CODES KEPT IN FUNCTIONS ##########################################################
-
-
-def test_fd(problems: list[str], searches: list[str], evals: list[str], filename: str=None) -> pd.DataFrame:
-    """
-    Tests all the possible settings of the fast-downward planner on the problems given.
-    The dataframe is composed of a problem column and a column by setting (pattern name: 'search_eval').
-    """
-    # searches = ['astar', 'wastar']
-    # evals = ['ff', 'add', 'cea', 'cg', 'goalcount']
-    d = {}
-    for problem in problems:
-        d[problem] = []
-        m = PROBLEM_REGEX.match(problem)
-        domain = m.group(1)
-        task = m.group(2)
-        domain_fp = f'benchmarks/{domain}/domain.pddl' if 'domain.pddl' in os.listdir(f'benchmarks/{domain}') else f'benchmarks/{domain}/domain{task}.pddl'
-        problem_fp = f'benchmarks/{domain}/task{task}.pddl'
-        for search in searches:
-            for eval in evals:
-                try:
-                    subprocess.run(f'python planners/{search}.py {eval} {domain_fp} {problem_fp} {search}.txt')
-                except:
-                    f = open(f'{search}.txt', 'w')
-                    f.close()
-                f = open(f'{search}.txt', 'r')
-                lines = f.readlines()
-                d[problem].append(len(lines) - 1 if len(lines) != 0 else 0)
-                f.close()
-        print(f'{problem}:', d[problem])
-    df = pd.DataFrame.from_dict(d, orient='index', columns=[f'{s}_{h}' for s in searches for h in evals])
-    if filename != None:
-        df.to_csv(filename, index_label='problem')
-    return df
-
-
-def compare_fd_results_to_oracle(fd_fp: str, oracle_fp: str, problems: list[str]=None) -> tuple[dict[str, list[str]], dict[str, list[tuple[str, str]]]]:
-    """
-    Compares fast-downward execution results with some oracle ones. If no problems are provided, they are sourced from the fast-downward results.
-    It returns two dictionnaries: the first one describes the non-optimal settings (problem wise) by their names (search_eval) and the second one by tuples (search, eval).
-    """
-    # oracle_fp = '../../../../Downloads/pyperplan/optimal_results_pyperplan.csv'
-    # fd_fp = 'fd_results.csv'
-    df = pd.read_csv(oracle_fp).set_index('problem')
-    fd_df = pd.read_csv(fd_fp).set_index('problem')
-    if problems == None:
-        problems = fd_df.index.tolist()
-    fd_planners = fd_df.columns.tolist()
-    non_optimal_settings = {}
-    non_optimal_args = {}
-    for problem in problems:
-        non_opt = []
-        for fd in fd_planners:
-            if fd_df.loc[problem][fd] != df.loc[problem].result:
-                non_opt.append(fd)
-        if non_opt != []:
-            non_optimal_settings[problem] = non_opt
-            non_optimal_args[problem] = [(fd.split('_')[0], fd.split('_')[1]) for fd in non_opt]
-    return non_optimal_settings, non_optimal_args
-
-
-def test_generators_to_average():
-    problems = ['airport06', 'airport07', 'blocks01', 'blocks02', 'blocks03', 'gripper01', 'miconic02', 'miconic03', 'openstacks01', 'pegsol04', 'pegsol05', 'pegsol06', 'psr-small03', 'psr-small06', 'psr-small08', 'psr-small09', 'tpp03', 'transport01', 'travel02']
-    planners = ['f5_hi', 'f5_hlength', 'f5_hnba', 'f2_hdiff', 'f2_hlength', 'f2_hnba', 'f4_hg', 'f4_hdiff', 'f4_hi', 'f4_hlength', 'f4_hmax', 'f4_hnba', 'f3_hg', 'f3_hdiff', 'f3_hi', 'f3_hlength', 'f3_hmax', 'f3_hnba', 'f6_hg', 'f6_hi', 'f6_hlength', 'f6_hnba']
-    configurations = [(p.split('_')[0], p.split('_')[1]) for p in planners]
-    pivot = 10
-    to_valid = configurations[:pivot]
-    to_select = configurations[pivot:]
-    df1 = df_for_problems_configs(problems, to_valid, 10, to_select, include_random=True)
-    df2 = df_for_problems_configs(problems, to_valid, 10, to_select, include_random=True)
-    d = {}
-    for i in range(NB_RANDOM_REPETITION):
-        d[f'random{i}'] = f'walks{i}'
-    df2.replace(to_replace=d, inplace=True)
-    df = pd.concat([df1, df2.loc[df2.generator.isin(list(d.values()))]], ignore_index=True)
-    # print(df['generator'].unique().tolist())
-    # plot_mutation_coverage(df, 'please.png')
-    # ...
-
-
-def overall_latex_chart(df, filename):
-    # df = pd.read_csv('results/final_results_20_10.csv')
-    tmp_latex = {
-        # static result keys
-        'mutant': '$S_{mut}$',
-        'min_dist_i': '$S^{min}_{i}$',
-        'min_dist_g': '$S^{min}_{g}$',
-        'max_dist_i': '$S^{max}_{i}$',
-        'max_dist_g': '$S^{max}_{g}$',
-        'bfs': '$S{0}$',
-        'walks_generator': '$R^{mean}_{walks}$',
-        'random': '$S^{mean}_{random}$'
-    }
-    # results to average detection
-    results_to_average = False
-    for g in df['generator'].unique().tolist():
-        if g[-1].isdigit():
-            results_to_average = True
-            break
-    generators = [g for g in df['generator'].unique().tolist() if not g[-1].isdigit()]
-    if results_to_average:
-        generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
-
-    scores = []
-    yerr = []
-    for g in generators:
-        g_df = df.loc[df.generator==g]
-        g_scores = [100 * len(g_df.loc[(g_df.failure==1) & (g_df.problem==p)]) / len(g_df.loc[g_df.problem==p]) if not g_df.loc[g_df.problem==p].empty else 0 for p in PROBLEMS]
-        scores.append(np.mean(g_scores))
-        yerr.append(np.std(g_scores))
-    if results_to_average:
-        for g in generators_to_average:
-            g_scores = []
-            for p in PROBLEMS:
-                p_df = df.loc[df.problem==p]
-                i_scores = [100 * len(p_df.loc[(p_df.generator==f'{g}{i}') & (p_df.failure==1)]) / len(p_df.loc[p_df.generator==f'{g}{i}']) if not p_df.loc[p_df.generator==f'{g}{i}'].empty else 0 for i in range(NB_RANDOM_REPETITION)]
-                g_scores.append(np.mean(i_scores))
-            scores.append(np.mean(g_scores))
-            yerr.append(np.std(g_scores))
-            generators.append(g)
-    _, ax = plt.subplots()
-    bar = ax.bar(generators, scores, yerr=yerr)
-    ax.bar_label(bar)
-    ax.set_xticks(ticks=np.arange(len(generators)), labels=[tmp_latex[g] for g in generators])
-    ax.set_ylabel('Average efficiency score [%]')
-    plt.savefig(filename, dpi=150)
 
 
 # exec(open('simulate_framework.py').read())
@@ -1160,79 +944,4 @@ if __name__ == '__main__':
     print(f'number of problems: {len(PROBLEMS)}')
     print(f'number of configurations: {len(CONFIGURATIONS)}')
 
-    # main_fd_results()
-    main_test_mutants_selection_impact()
-
-    # df = pd.read_csv('deterministic_fd_results_10.csv')
-    # n_max = 10
-    # filename = 'caca2.tex'
-    # # results to average detection
-    # results_to_average = False
-    # for g in df['generator'].unique().tolist():
-    #     if g[-1].isdigit():
-    #         results_to_average = True
-    #         break
-    # generators = [g for g in df['generator'].unique().tolist() if not g[-1].isdigit()]
-    # planners = df['planner'].unique().tolist()
-    # problems = df['problem'].unique().tolist()
-    # if results_to_average:
-    #     generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
-    # d = {}
-    # nb_mutants = len(planners)
-    # for generator in generators:
-    #     g_df = df.loc[df.generator==generator]
-    #     d[generator] = []
-    #     for n in range(1, n_max + 1):
-    #         scores = []
-    #         for problem in problems:
-    #             p_df = g_df.loc[g_df.problem==problem]
-    #             nb_mutants_killed = 0
-    #             for planner in planners:
-    #                 n_df = p_df.loc[p_df.planner==planner].head(n)
-    #                 if not n_df.empty:
-    #                     nb_mutants_killed += 1 if not n_df.loc[n_df.failure==1].empty else 0
-    #             scores.append(100 * nb_mutants_killed / nb_mutants)
-    #         d[generator].append(np.mean(scores))
-    # if results_to_average:
-    #     for g in generators_to_average:
-    #         d[g] = []
-    #         for n in range(1, n_max + 1):
-    #             scores = []
-    #             for problem in problems:
-    #                 problem_df = df.loc[df.problem==problem]
-    #                 score = []
-    #                 for i in range(NB_RANDOM_REPETITION):
-    #                     gen_df = problem_df.loc[problem_df.generator==f'{g}{i}']
-    #                     nb_mutants_killed = 0
-    #                     for planner in planners:
-    #                         n_df = gen_df.loc[gen_df.planner==planner].head(n)
-    #                         if not n_df.empty:
-    #                             nb_mutants_killed += 1 if not n_df.loc[n_df.failure==1].empty else 0
-    #                     score.append(100 * nb_mutants_killed / nb_mutants)
-    #                 scores.append(np.mean(score))
-    #             d[g].append(np.mean(scores))
-    # if results_to_average:
-    #     for g in generators_to_average:
-    #         generators.append(g)
-    # res_df = pd.DataFrame(data=d, index=[i for i in range(n_max)])
-    # if filename != None:
-    #     if filename.endswith('.tex'):
-    #         pd.DataFrame(data=d, index=[i for i in range(n_max)]).to_latex(filename, float_format='{:0.1f}\%'.format, header=[GENERATORS_LATEX[g] for g in generators], escape=False)
-    #     elif filename.endswith('.csv'):
-    #         pd.DataFrame(data=d, index=[i for i in range(n_max)]).to_csv(filename, index_label='N')
-    #     else:
-    #         print('filename extension not supported.')
-
-
-    # nb_experiments = 20
-    # n = 10
-    # efficiency_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('efficiency') and f.endswith('.csv')]
-    # coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('coverage') and f.endswith('.csv')]
-    # n_scaling_mutation_coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('n_scaling_mutation_coverage') and f.endswith('.csv')]
-    # result_fps = [f'results/{f}' for f in os.listdir('results') if f.split('.')[0].isnumeric() and f.endswith('.csv')]
-    # merge_result_dataframe_latex(efficiency_fps, f'efficiency_{nb_experiments}_{n}.tex')
-    # merge_result_dataframe_latex(coverage_fps, f'coverage_{nb_experiments}_{n}.tex')
-    # merge_n_scaling_result_dataframe_latex(n_scaling_mutation_coverage_fps, f'n_scaling_mutation_coverage_{nb_experiments}_{n}.tex')
-    # final_result_df = pd.concat([pd.read_csv(result_fp) for result_fp in result_fps], ignore_index=True)
-    # final_result_df.to_csv(f'results/final_results_{nb_experiments}_{n}.csv', index=0)
-    # plot_overall_performance(final_result_df, f'overall_efficiency_{nb_experiments}_{n}.png')
+    # OK.
