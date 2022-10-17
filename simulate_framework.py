@@ -84,6 +84,21 @@ def get_arguments(configurations: list[tuple[str, str]], problems: list[str], n:
     return args
 
 
+def cache_problem(domain_filename: str, problem_filename: str, output: str, configurations: list[tuple[str, str]]) -> None:
+    """
+    Runs the framework to create the .csv cache file of the given problem.
+    Basically, the framework applies metamophic testing on all given configurations with all the nodes cached as follow-up test cases.
+    The results are then saved and exported in a .csv file. It is time and resources consuming but it avoids any other mutant planner execution as
+    the future selected states and their related results will be based with such a .csv file.
+    """
+    planners_commands = []
+    for (s, h) in configurations:
+        planners_commands.append(f'"planners/prolog_planner.exe mutated_astar-{s} {HEURISTICS[h]}"')
+    command = f'main.exe --test {domain_filename} {problem_filename} {output} {" ".join(planners_commands)}'
+    os.system(command)
+    print('done.')
+
+
 def run_framework_prolog_planner(domain_filename: str, problem_filename: str, configuration: tuple[str, str], nb_tests: int, result_filename: str, output_filename: str, generators: list[str]) -> None:
     """
     Runs a prolog_planner configuration, defined by a search and a heuristic, and returns the execution time.
@@ -100,7 +115,7 @@ def run_framework_fd_planner(domain_filename: str, problem_filename: str, config
     """
     Runs a fast-downward configuration, defined by a search and a heuristic, and returns the execution time.
     """
-    planner_command = f'"python planners/{configuration[0]}.py {configuration[1]}"'
+    planner_command = f'"python planners/fd_planner.py {configuration[0]} {configuration[1]}"'
     command = f'main.exe {domain_filename} {problem_filename} {planner_command} {nb_tests} {result_filename} {output_filename} {" ".join(generators)}'
     try:
         subprocess.run(command, stdout=subprocess.DEVNULL)
@@ -208,40 +223,6 @@ def result_problem_configs_selections(problem: str, configurations: list[tuple[s
     print(f'{problem} done.')
 
 
-def result_problem_configs_mutants(problem: str, configurations: list[tuple[str, str]], mutants: list[tuple[str, str]], n: int) -> None:
-    """
-    Exports a .csv file of mutants-select-based generator result for the given problem and planners.
-    """
-    #TODO: not used.
-    result_fp = f'tmp/selection_mutant_generator_{problem}_{n}.csv'
-    if os.path.exists(result_fp) and not pd.read_csv(result_fp).empty:
-        print(f'{result_fp} already exists. Skipped.')
-        return
-
-    df = pd.read_csv(problem_result_filepath(problem))
-
-    select_df = df.loc[df.failure==1]
-    select_df = pd.concat([select_df.loc[(select_df.search==s) & (select_df.heuristic==h)] for (s, h) in mutants], ignore_index=True)[['node_index', 'failure']].groupby(['node_index'], as_index=False).count()
-    select_df.sort_values(by='failure', ascending=False, inplace=True)
-    indexes = select_df['node_index'].head(n).tolist()
-    print(problem, f'{0 if select_df.empty else (100 * select_df["failure"].tolist()[0] / len(mutants)):.1f}%', len(indexes), indexes)
-    sub_config_dfs = []
-    for configuration in configurations:
-        planner = f'{configuration[0]}_{configuration[1]}'
-        config_df = df.loc[(df.search==configuration[0]) & (df.heuristic==configuration[1])]
-        config_tmp = pd.concat([config_df.loc[config_df.node_index==i] for i in indexes], ignore_index=True)
-        config_tmp.insert(1, 'generator', 'mutant', allow_duplicates=True)
-        config_tmp.drop(['node_index', 'search', 'heuristic'], axis=1, inplace=True)
-        # adds the name of the planner / configuration / mutant
-        config_tmp.insert(0, 'planner', planner, allow_duplicates=True)
-        sub_config_dfs.append(config_tmp)
-    # regroups the results of all configurations
-    result = pd.concat(sub_config_dfs, ignore_index=True)
-    # adds the problem column
-    result.insert(1, 'problem', problem, allow_duplicates=True)
-    result.to_csv(result_fp, index=0)
-
-
 def result_problem_configs_random(problem:str, configurations: list[tuple[str, str]], n: int) -> None:
     """
     Exports a .csv file of the random state selection generator results for the given configurations on the problem.
@@ -345,7 +326,7 @@ def regroup_results(n: int) -> None:
         select_result_fp = f'data/selection_generators_{n}.csv'
         random_result_fp = f'data/selection_random_{n}.csv'
         if os.path.exists(select_result_fp) and os.path.exists(random_result_fp):
-            df = pd.concat([select_result_fp, random_result_fp], ignore_index=True)
+            df = pd.concat([pd.read_csv(select_result_fp), pd.read_csv(random_result_fp)], ignore_index=True)
             df.to_csv(fp, index=0)
         else:
             print('One and more result files are missing. Please build the results first.')
@@ -487,7 +468,7 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str) -> None:
         for generator in generators:
             generator_df = problem_df.loc[problem_df.generator==generator]
             if generator_df.empty:
-                print(f'no data for {problem} {generator}')
+                # print(f'no data for {problem} {generator}')
                 scores[generator].append(0)
             else:
                 score = 0
@@ -499,8 +480,8 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str) -> None:
                         nb_planners +=1
                         if not planner_df.loc[planner_df.failure==1].empty:
                             score += 1
-                    else:
-                        print(f'no data for {problem} {generator} {planner}')
+                    # else:
+                    #     print(f'no data for {problem} {generator} {planner}')
                 scores[generator].append(100 * score / nb_planners)
         if results_to_average:
             for g in generators_to_average:
@@ -509,9 +490,9 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str) -> None:
                 for i in range(nb_repetition):
                     generator = f'{g}{i}'
                     generator_df = problem_df.loc[problem_df.generator==generator]
-                    if generator_df.empty:
-                        print(f'no data for {problem} {generator}')
-                    else:
+                    if not generator_df.empty:
+                    #     print(f'no data for {problem} {generator}')
+                    # else:
                         score = 0
                         nb_planners = 0
                         for planner in planners:
@@ -521,8 +502,8 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str) -> None:
                                 nb_planners +=1
                                 if not planner_df.loc[planner_df.failure==1].empty:
                                     score += 1
-                            else:
-                                print(f'no data for {problem} {generator} {planner}')
+                            # else:
+                            #     print(f'no data for {problem} {generator} {planner}')
                         g_scores.append(100 * score / nb_planners)
                 scores[g].append(np.mean(g_scores) if g_scores != [] else 0) # [] means no data
     # removing unrelevant data
@@ -533,7 +514,7 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str) -> None:
         if data.sum(dtype=int) != 0:
             relevant_problems.append(problems[i])
         else:
-            print(f'{problems[i]} data is unrelevant: index {i} has to be removed.')
+            # print(f'{problems[i]} data is unrelevant: index {i} has to be removed.')
             indexes_to_remove.append(i)
     if indexes_to_remove != []:
         for g in scores.keys():
@@ -587,7 +568,7 @@ def dataframe_mutation_coverage(df: pd.DataFrame, filename: str=None) -> pd.Data
         for generator in generators:
             generator_df = problem_df.loc[problem_df.generator==generator]
             if generator_df.empty:
-                print(f'no data for {problem} {generator}')
+                # print(f'no data for {problem} {generator}')
                 scores[generator].append(0)
             else:
                 score = 0
@@ -599,8 +580,8 @@ def dataframe_mutation_coverage(df: pd.DataFrame, filename: str=None) -> pd.Data
                         nb_planners +=1
                         if not planner_df.loc[planner_df.failure==1].empty:
                             score += 1
-                    else:
-                        print(f'no data for {problem} {generator} {planner}')
+                    # else:
+                        # print(f'no data for {problem} {generator} {planner}')
                 scores[generator].append(100 * score / nb_planners)
         if results_to_average:
             for g in generators_to_average:
@@ -609,9 +590,7 @@ def dataframe_mutation_coverage(df: pd.DataFrame, filename: str=None) -> pd.Data
                 for i in range(nb_repetition):
                     generator = f'{g}{i}'
                     generator_df = problem_df.loc[problem_df.generator==generator]
-                    if generator_df.empty:
-                        print(f'no data for {problem} {generator}')
-                    else:
+                    if not generator_df.empty:
                         score = 0
                         nb_planners = 0
                         for planner in planners:
@@ -805,7 +784,6 @@ def main_test_mutants_selection_impact():
         to_select = configurations[validation_size:validation_size + selection_size]
         simulation_result_df = df_for_problems_configs(problems, to_valid, n, to_select, True) # results of the simulation of the framework
         # for the random_walks generator baseline, the framework needs to be dynamically executed
-        # runs the non-deterministic results 3 times
         random_walks_result_dfs = []
         for j in range(NB_RANDOM_WALKS_REPETITIONS):
             my_args = get_arguments(to_valid, problems, n, ['walks_generator'])
@@ -846,19 +824,6 @@ def main_build_deterministic_results():
     regroup_select_results(NB_TESTS)
 
 
-def main_build_mutant_results(configurations: list[tuple[str, str]]):
-    """
-    main() for building results of the mutant-based selection methodology.
-    As it involves choosing a subset of mutants for the state selection, it must be re-computed if the subset changes.
-    """
-    #TODO: not used.
-    my_args = [(problem, configurations, NB_TESTS) for problem in PROBLEMS]
-    print(f'{len(my_args)} executions are about to be launched.')
-    pool = multiprocessing.Pool(processes=NB_THREADS)
-    pool.starmap(result_problem_configs_mutants, my_args, chunksize=3)
-    regroup_mutant_results(NB_TESTS)
-
-
 def main_build_random_results():
     """
     main() for building the random selection method results.
@@ -876,10 +841,8 @@ def main_fd_results():
         'select_bfs': 'bfs',
         'select_mutants_killers': 'mutant'
     }
-    #TODO: removes this shortcut!
-    problems = ['airport07', 'blocks01', 'gripper01', 'miconic02', 'miconic03', 'openstacks01', 'pegsol04', 'pegsol05', 'pegsol06', 'tpp03', 'transport01']
     # creates the cache files for all the problems considering all the mutants (as we test fast-downward planners here)
-    for problem in problems:
+    for problem in PROBLEMS:
         make_mt_cache_file_from_csv(problem, CONFIGURATIONS)
 
     # defines the fast-downward settings for testing
@@ -890,7 +853,7 @@ def main_fd_results():
     pool = multiprocessing.Pool(processes=NB_THREADS)
 
     # runs the deterministic results (once)
-    my_args = get_arguments(fd_configurations, problems, NB_TESTS, list(deterministic_generators.keys()))
+    my_args = get_arguments(fd_configurations, PROBLEMS, NB_TESTS, list(deterministic_generators.keys()))
     print(f'{len(my_args)} executions are about to be launched.')
     pool.starmap(run_framework_fd_planner, my_args, chunksize=3)
 
@@ -906,7 +869,7 @@ def main_fd_results():
 
     # runs the non-deterministic results NB_RANDOM_REPETITIONS times
     for i in range(NB_RANDOM_REPETITIONS):
-        my_args = get_arguments(fd_configurations, problems, NB_TESTS, ['select_random', 'walks_generator'])
+        my_args = get_arguments(fd_configurations, PROBLEMS, NB_TESTS, ['select_random', 'walks_generator'])
         print(f'{len(my_args)} executions are about to be launched.')
         pool.starmap(run_framework_fd_planner, my_args, chunksize=3)
         result_fps = list(map(lambda x: x[4], my_args))
@@ -917,7 +880,7 @@ def main_fd_results():
     for i in range(NB_RANDOM_REPETITIONS):
         random_result_fp = f'results/random_{i}_fd_results_{NB_TESTS}.csv'
         random_result_df = pd.read_csv(random_result_fp)
-        # post-processes the results by renaming the names of the generator (more handier result mining and presentation)
+        # post-processes the results by renaming the names of the generator
         random_result_df.replace(to_replace={'select_random' : f'random{i}', 'walks_generator' : f'walks{i}'}, inplace=True)
         # ... thus overwrites every original result subfile
         random_result_df.to_csv(random_result_fp, index=0)
@@ -929,11 +892,33 @@ def main_fd_results():
     result_df.to_csv(f'results/fd_results_{NB_TESTS}.csv', index=0)
     dataframe_mutation_coverage(result_df, f'results/fd_results_{NB_TESTS}_coverage.csv')
     n_scaling_mutation_coverage(result_df, NB_TESTS,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage.csv')
+    # exports n scaling detection coverage results as a latex considering all the problems
+    n_scaling_mutation_coverage(result_df, NB_TESTS,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage.tex')
     plot_mutation_coverage(result_df, f'results/fd_results_{NB_TESTS}_coverage.png')
 
+    # the results shown in the paper only consider relevant problems, i.e problems for which at least a detection happened
+    paper_df = pd.concat([result_df.loc[result_df.problem==p] for p in result_df['problem'].unique().tolist() if not result_df.loc[(result_df.problem==p) & (result_df.failure==1)].empty], ignore_index=True)
+    n_scaling_mutation_coverage(paper_df, NB_TESTS,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage2.tex')
 
-######################################################################################################################################################
-############################################################## USED CODES KEPT IN FUNCTIONS ##########################################################
+
+def main_build_cache():
+    args = []
+    for problem in PROBLEMS:
+        m = PROBLEM_REGEX.match(problem)
+        domain_name = m.group(1)
+        i = m.group(2)
+        domain = 'domain' if 'domain.pddl' in os.listdir(f'benchmarks/{domain_name}') else f'domain{i}'
+        arg = (f'benchmarks/{domain_name}/{domain}.pddl', f'benchmarks/{domain_name}/task{i}.pddl', f'tmp/{problem}.txt', CONFIGURATIONS)
+        args.append(arg)
+
+    print(f'{len(args)} executions are about to be launched.')
+    pool = multiprocessing.Pool(processes=NB_THREADS)
+    pool.starmap(cache_problem, args, chunksize=2)
+
+    tmp_files = list(map(lambda x: x[2], args))
+    for tmp_file in tmp_files:
+        if os.path.exists(tmp_file):
+            os.remove(tmp_file)
 
 
 # exec(open('simulate_framework.py').read())
@@ -944,4 +929,14 @@ if __name__ == '__main__':
     print(f'number of problems: {len(PROBLEMS)}')
     print(f'number of configurations: {len(CONFIGURATIONS)}')
 
-    # OK.
+    # builds .csv file caches to avoid redundant mutants executions
+    # main_build_cache()
+    # builds the results that can only have to be executed once
+    # main_build_deterministic_results()
+    # main_build_random_results()
+    # regroups them
+    regroup_results(NB_TESTS)
+    # executes the first experiment
+    main_test_mutants_selection_impact()
+    # executes the second experiment
+    main_fd_results()
