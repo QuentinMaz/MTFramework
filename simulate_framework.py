@@ -29,12 +29,12 @@ PLANNERS = [f'{s}_{h}' for (s, h) in CONFIGURATIONS]
 PROBLEM_REGEX = re.compile('(.+)(\d\d)')
 GENERATORS_LATEX = {
     # static result keys
-    'mutant': '$S_{mut}$',
-    'bfs': '$S_{0}$',
-    'random': '$S^{mean}_{random}$',
+    'mutant': '$MorphinPlan$',
+    'bfs': '$NoSelect$',
+    'random': '$RandomSelect$',
     'random_std': '$S^{std}_{random}$',
     # dynamic result keys
-    'walks': '$R^{mean}_{walks}$', # main_fd_results
+    'walks': '$RandomWalks$', # main_fd_results
     'walks_std': '$R^{std}_{walks}$' # main_fd_results
 }
 DETERMINISTIC_STATIC_GENERATORS = ['bfs'] # ['min_dist_i', 'min_dist_g', 'max_dist_i', 'max_dist_g', 'bfs', 'mutant', 'select_mutants_killers']
@@ -51,22 +51,6 @@ f.close()
 
 ######################################################################################################################################################
 ############################################################## LOW ###################################################################################
-
-
-def build_main() -> None:
-    """
-    Builds the framework (main.exe) and removes all the artifacts that are created during the process.
-    """
-    compile_command = 'sicstus --goal "compile(framework), save_program(\'main.sav\'), halt."'
-    #TODO: private
-    build_command = 'cd "C:\Program Files (x86)\Microsoft Visual Studio\\2019\Community\VC\Auxiliary\Build" && vcvars64.bat && cd "C:\\Users\Quentin\Documents\\5INFO\Simula\MTFramework" && spld --output=main.exe --static main.sav'
-    try:
-        subprocess.run(compile_command, shell=True, stdout=subprocess.DEVNULL)
-        subprocess.run(build_command, shell=True, stdout=subprocess.DEVNULL)
-        for artifact in ['main.sav', 'main.pdb', 'main.ilk', 'main.exp', 'main.lib']:
-            os.remove(artifact)
-    except:
-        print('something went wrong')
 
 
 def get_arguments(configurations: list[tuple[str, str]], problems: list[str], n: int, generators: list[str]) -> list[tuple[str, str, tuple[str, str], int, str, str, list[str]]]:
@@ -373,12 +357,22 @@ def merge_result_dataframe_latex(filepaths: list[str], filename: str) -> None:
     df_mean = df.groupby(['problem'], sort=False).mean()
     df_std = df.groupby(['problem'], sort=False).std()
     problems = [p for p in df['problem'].unique().tolist() if p != 'mean']
-    columns = df_mean.columns
+    gens1 = [c for c in df_mean.columns if c in ['mutant', 'bfs']]
+    gens2 = [c for c in df_mean.columns if c in ['random', 'walks']]
+    gens2.sort()
+    columns = gens1 + gens2
     data = {}
     for problem in problems:
         max_value = max(df_mean.loc[problem])
         # each cell is the average of the means with the standard deviation
-        data[problem] = [f'{df_mean.at[problem, c]:.1f}$\pm${df_std.at[problem, c]:.1f}' if df_mean.at[problem, c] != max_value else f'\textbf{{{df_mean.at[problem, c]:.1f}$\pm${df_std.at[problem, c]:.1f}}}' for c in columns]
+        data[problem] = []
+        for c in gens1:
+            cell = f'{df_mean.at[problem, c]:.1f}$\pm${df_std.at[problem, c]:.1f}'
+            data[problem].append(cell if df_mean.at[problem, c] != max_value else f'\textbf{{{cell}}}')
+        for c in gens2:
+            cell = f'({df_mean.at[problem, c]:.1f}$\pm${df_mean.at[problem, c + "_std"]:.1f})$\pm${df_std.at[problem, c]:.1f}'
+            data[problem].append(cell if df_mean.at[problem, c] != max_value else f'\textbf{{{cell}}}')
+
     # for the mean line, each cell is the average of the previous means with the related standard deviation
     problem = 'mean'
     max_value = max(df_mean.loc[problem])
@@ -400,10 +394,30 @@ def merge_n_scaling_result_dataframe_latex(filepaths: list[str], filename: str) 
     n_values = df['N'].unique().tolist()
     df_mean = df.groupby(['N'], sort=False).mean()
     df_std = df.groupby(['N'], sort=False).std()
-    generators = [c for c in df_mean.columns if c != 'N']
-    data = {f'$N_{{{n}}}$': [f'{df_mean.at[n, g]:.1f}$\pm${df_std.at[n, g]:.1f}' for g in generators] for n in n_values}
-    df = pd.DataFrame.from_dict(data, orient='index', columns=[GENERATORS_LATEX[g] for g in generators])
-    df.to_latex(filename, escape=False)
+    generators = [c for c in ['mutant', 'bfs', 'random', 'walks'] if c in df_mean.columns]
+    if filename.endswith('.tex'):
+        data = {f'$N_{{{n}}}$': [f'{df_mean.at[n, g]:.1f}$\pm${df_std.at[n, g]:.1f}' for g in generators] for n in n_values}
+        df = pd.DataFrame.from_dict(data, orient='index', columns=[GENERATORS_LATEX[g] for g in generators])
+        df.to_latex(filename, escape=False)
+    elif filename.endswith('.png'):
+        # plotting
+        _, ax = plt.subplots()
+        x = np.arange(1, len(n_values) + 1)
+        for g in generators:
+            y = [df_mean.at[n, g] for n in n_values]
+            err = [df_std.at[n, g] for n in n_values]
+            ax.plot(x, [df_mean.at[n, g] for n in n_values], label=GENERATORS_LATEX[g])
+            ax.fill_between(x, (np.array(y) - np.array(err)).tolist(), (np.array(y) + np.array(err)).tolist(), alpha=0.2)
+        ax.set_xticks(x)
+        ax.set_xlim(1, len(n_values))
+        ax.grid(True)
+        ax.set_xlabel('$N_{max}$')
+        ax.set_ylabel('Average mutation score [%]')
+        ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.1), ncol=len(generators), fancybox=True, shadow=True)
+        plt.tight_layout()
+        plt.savefig(filename, dpi=200)
+    else:
+        print('unsupported extension file.')
 
 
 def get_framework_result_dataframe(filepath: str) -> pd.DataFrame:
@@ -530,7 +544,7 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str) -> None:
         ax.bar(x + x_offset, scores[generator], width=bar_width, label=GENERATORS_LATEX[generator])
     ax.set_xticks(x)
     ax.set_xticklabels(relevant_problems, rotation=30)
-    ax.set_ylabel('Mutation score [%]')
+    ax.set_ylabel('Detection coverage [%]')
     ax.legend(loc='upper left')
 
     # puts a legend to the right of the current axis
@@ -659,7 +673,7 @@ def plot_overall_performance(df: pd.DataFrame, filename: str) -> None:
     bar = ax.bar(generators, scores, yerr=yerr)
     ax.bar_label(bar)
     ax.set_xticks(ticks=np.arange(len(generators)), labels=[GENERATORS_LATEX[g] for g in generators])
-    ax.set_ylabel('Average efficiency score [%]')
+    ax.set_ylabel('Rate of fault-revealing test cases [%]')
     plt.savefig(filename, dpi=200)
 
 
@@ -739,10 +753,11 @@ def n_scaling_mutation_coverage(df: pd.DataFrame, n_max: int, filename: str=None
                 generator = gens[i]
                 ax.plot(x, d[generator], label=GENERATORS_LATEX[generator])
             ax.set_xlabel('$N_{max}$')
-            ax.set_ylabel('Average mutation score [%]')
-            ax.legend(loc='upper left')
-
-            ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05), ncol=len(gens), fancybox=True, shadow=True)
+            ax.set_ylabel('Average detection coverage [%]')
+            ax.set_xticks(x)
+            ax.set_xlim(1, n_max)
+            ax.grid(True)
+            ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.1), ncol=len(gens), fancybox=True, shadow=True)
             plt.tight_layout()
             plt.savefig(filename, dpi=200)
         else:
@@ -761,7 +776,7 @@ def main_test_mutants_selection_impact():
     n = NB_TESTS
     problems = PROBLEMS
     configurations = CONFIGURATIONS
-    print(f'nb configurations: {len(configurations)}', f'nb problems: {len(problems)}')
+    # print(f'nb configurations: {len(configurations)}', f'nb problems: {len(problems)}')
     """
     Here, 22 mutants are available. We state the following propositions as 'intuitive':
         - In order to do proper mutation testing, the validation mutant set has to be at least of size 10.
@@ -806,8 +821,8 @@ def main_test_mutants_selection_impact():
     coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('coverage') and f.endswith('.csv')]
     n_scaling_mutation_coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('n_scaling_mutation_coverage') and f.endswith('.csv')]
     result_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('result') and f.endswith('.csv')]
-    merge_result_dataframe_latex(coverage_fps, f'coverage_{nb_experiments}_{n}.tex')
-    merge_n_scaling_result_dataframe_latex(n_scaling_mutation_coverage_fps, f'n_scaling_mutation_coverage_{nb_experiments}_{n}.tex')
+    merge_result_dataframe_latex(coverage_fps, f'results/coverage_{nb_experiments}_{n}.tex')
+    merge_n_scaling_result_dataframe_latex(n_scaling_mutation_coverage_fps, f'results/n_scaling_mutation_coverage_{nb_experiments}_{n}.png')
     final_result_df = pd.concat([pd.read_csv(result_fp) for result_fp in result_fps], ignore_index=True)
     final_result_df.to_csv(f'results/final_results_{nb_experiments}_{n}.csv', index=0)
     plot_overall_performance(final_result_df, f'results/overall_efficiency_{nb_experiments}_{n}.png')
@@ -898,7 +913,8 @@ def main_fd_results():
 
     # the results shown in the paper only consider relevant problems, i.e problems for which at least a detection happened
     paper_df = pd.concat([result_df.loc[result_df.problem==p] for p in result_df['problem'].unique().tolist() if not result_df.loc[(result_df.problem==p) & (result_df.failure==1)].empty], ignore_index=True)
-    n_scaling_mutation_coverage(paper_df, NB_TESTS,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage2.tex')
+    plot_mutation_coverage(paper_df, f'results/fd_results_{NB_TESTS}_coverage.png')
+    n_scaling_mutation_coverage(paper_df, NB_TESTS,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage.png')
 
 
 def main_build_cache():
@@ -923,17 +939,14 @@ def main_build_cache():
 
 # exec(open('simulate_framework.py').read())
 if __name__ == '__main__':
-    if 'main.exe' not in os.listdir():
-        build_main()
-    print(f'source_results_costs: {len(source_results_costs)}.')
     print(f'number of problems: {len(PROBLEMS)}')
     print(f'number of configurations: {len(CONFIGURATIONS)}')
 
     # builds .csv file caches to avoid redundant mutants executions
-    # main_build_cache()
+    main_build_cache()
     # builds the results that can only have to be executed once
-    # main_build_deterministic_results()
-    # main_build_random_results()
+    main_build_deterministic_results()
+    main_build_random_results()
     # regroups them
     regroup_results(NB_TESTS)
     # executes the first experiment
