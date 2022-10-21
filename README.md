@@ -1,4 +1,4 @@
-# Metamorphic Testing of Optimality in AI Planners (MorphinPlan)
+# Mutation Adequacy Test Case Selection for Metamorphic Testing of AI Planners (MorphinPlan)
 
 MorphinPlan is a framework that sets up metamorphic testing for checking optimal planning. In the following, we detail the different steps to replicate the experiments done to evaluate this tool, from their execution to the data mining. Please do not rename the folder of the repository when cloning (i.e., use `git clone` command without additional parameter).
 
@@ -48,3 +48,7 @@ The resources presented in the paper are:
 - RQ3: *results/fd_results_10_n_scaling_coverage.png* and *results/fd_results_10_coverage.png*.
 
 They may not present the results in the same manner as done in the MorphinPlan's paper. In any case, they are easily readable.
+
+## Link to data actually used in the paper
+If, for whatever reason, the experiments can't be reproduced, the aforementioned files can be freely accessed [here](https://doi.org/10.5281/zenodo.7234301).
+The figures are the exact ones presented in the paper. Regarding the .csv files, they correspond to the ones used at the end of the script to build the figures and the latex tables. Therefore, if issues occur to run the experiments, one can always place those files in the *results* folder and adapt the provided script to make it directly leverage the .csv files in order to get the figures back.
