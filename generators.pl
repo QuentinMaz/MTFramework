@@ -28,14 +28,16 @@
 
 %% bfs_generator is one of the baseline generators. It explores the state space in a breath first search manner and returns the N first states discovered.
 % if no heuristic given, then return the N first states visited
-bfs_generator(N, Results) :-
+bfs_generator(N, RelevantResults) :-
     get_problem(Problem),
     problem_initial_state(Problem, InitialState),
     StartNode = node(InitialState, 0),
     list_queue([StartNode], Queue),
     bfs(Queue, N, [], VisitedNodes),
     % removes the start node (as it is the initial state...)
-    reverse(VisitedNodes, [_|Results]).
+    reverse(VisitedNodes, [_|Results]),
+    problem_goal_state(Problem, GoalState),
+    filter_nodes(Results, GoalState, RelevantResults).
 
 %% bfs(+Queue, +N, +VisitedNodes, -Results).
 bfs(Queue, _N, VisitedNodes, VisitedNodes) :-
@@ -280,6 +282,15 @@ filter_nodes([node(State, Cost)|T1], N, MaximumCost, [node(State, Cost)|T2]) :-
     filter_nodes(T1, NewN, MaximumCost, T2).
 filter_nodes([_|T], N, MaximumCost, FilteredNodes) :-
     filter_nodes(T, N, MaximumCost, FilteredNodes).
+
+filter_nodes([], _, []) :-
+    !.
+filter_nodes([node(State, Cost)|T1], StateToNotInclude, [node(State, Cost)|T2]) :-
+    \+ ord_subset(StateToNotInclude, State),
+    !,
+    filter_nodes(T1, StateToNotInclude, T2).
+filter_nodes([_|T], StateToNotInclude, FilteredNodes) :-
+    filter_nodes(T, StateToNotInclude, FilteredNodes).
 
 
 % computes the number of reachable states with respect to Maximum
