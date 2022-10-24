@@ -14,7 +14,7 @@
 :- use_module(library(ordsets), [ord_subtract/3, ord_union/3, ord_union/2, ord_subset/2]).
 :- use_module(library(queues), [queue_cons/3, list_queue/2, queue_append/3, queue_memberchk/2, empty_queue/1]).
 :- use_module(library(sets), [is_set/1, list_to_set/2]).
-:- use_module(library(lists), [reverse/2, nth0/3]).
+:- use_module(library(lists), [reverse/2, nth0/3, include/3]).
 :- use_module(library(random), [random_member/2, random_permutation/2, random/3]).
 
 :- ensure_loaded(domain).
@@ -28,16 +28,23 @@
 
 %% bfs_generator is one of the baseline generators. It explores the state space in a breath first search manner and returns the N first states discovered.
 % if no heuristic given, then return the N first states visited
-bfs_generator(N, RelevantResults) :-
+bfs_generator(N, SolvableNodes) :-
     get_problem(Problem),
     problem_initial_state(Problem, InitialState),
     StartNode = node(InitialState, 0),
     list_queue([StartNode], Queue),
     bfs(Queue, N, [], VisitedNodes),
     % removes the start node (as it is the initial state...)
-    reverse(VisitedNodes, [_|Results]),
+    reverse(VisitedNodes, [_|GeneratedNodes]),
     problem_goal_state(Problem, GoalState),
-    filter_nodes(Results, GoalState, RelevantResults).
+    filter_nodes(GeneratedNodes, GoalState, RelevantNodes),
+    get_mf(MandatoryFacts),
+    write(MandatoryFacts), nl,
+    include(ord_subset([is-pushing(airplane_dfboy)]), RelevantNodes, SolvableNodes),
+    length(GeneratedNodes, GNL),
+    length(RelevantNodes, RNL),
+    length(SolvableNodes, SNL),
+    format('~d ~d ~d.\n', [GNL, RNL, SNL]).
 
 %% bfs(+Queue, +N, +VisitedNodes, -Results).
 bfs(Queue, _N, VisitedNodes, VisitedNodes) :-

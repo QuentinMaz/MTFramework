@@ -35,7 +35,8 @@ GENERATORS_LATEX = {
     'random_std': '$S^{std}_{random}$',
     # dynamic result keys
     'walks': '$RandomWalks$', # main_fd_results
-    'walks_std': '$R^{std}_{walks}$' # main_fd_results
+    'walks_std': '$R^{std}_{walks}$', # main_fd_results
+    'a': 'a!!...'
 }
 DETERMINISTIC_STATIC_GENERATORS = ['bfs'] # ['min_dist_i', 'min_dist_g', 'max_dist_i', 'max_dist_g', 'bfs', 'mutant', 'select_mutants_killers']
 NB_RANDOM_WALKS_REPETITIONS = 3
@@ -937,19 +938,141 @@ def main_build_cache():
             os.remove(tmp_file)
 
 
+def update_cache(problem: str, indexes: list[str]):
+    csv_cache_filepath = problem_result_filepath(problem)
+    txt_cache_filepath = f'{csv_cache_filepath.split(".")[0]}.txt'
+    mut_txt_cache_filepath = f'{csv_cache_filepath.split(".")[0]}_mt.txt'
+    f = open(txt_cache_filepath, 'r')
+    nodes = f.readlines()
+    f.close()
+    f = open(mut_txt_cache_filepath, 'w')
+    [f.write(nodes[i]) for i in indexes]
+    f.close()
+
+
+def remove_cache(problem: str):
+    filepath = f'{problem_result_filepath(problem).split(".")[0]}.txt'
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    else:
+        print(f'file\t{filepath}\t not found.')
+
+
+def generate_framework(problem):
+    m = PROBLEM_REGEX.match(problem)
+    domain_name = m.group(1)
+    i = m.group(2)
+    domain = 'domain' if 'domain.pddl' in os.listdir(f'benchmarks/{domain_name}') else f'domain{i}'
+    domain_filename = f'benchmarks/{domain_name}/{domain}.pddl'
+    problem_filename = f'benchmarks/{domain_name}/task{i}.pddl'
+    command = f'main.exe --bfs {domain_filename} {problem_filename} 2 5000'
+    print(command)
+    try:
+        subprocess.run(command, capture_output=True)
+    except:
+        print(f'generate_framework error with args: --bfs {domain_filename} {problem_filename} 2 5000.')
+
+
+def barsurface(df, feature, filename):
+    nx, ny = len(PROBLEMS), len(fd_configurations)
+    x = range(nx)
+    y = range(ny)
+    data = np.zeros((nx, ny))
+    for i in x:
+        data[i] = [len(df.loc[(df.problem==PROBLEMS[i]) & (df.planner==f'{s}_{h}') & (df[feature]==1)]) for (s, h) in fd_configurations]
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    xx = np.array([[i] * ny for i in x]).ravel() # x coordinates of each bar
+    yy = np.array([i for i in y] * nx) # y coordinates of each bar
+    z = np.zeros(nx * ny) # z coordinates of each bar
+    dx = np.ones(nx * ny) # length along x-axis of each bar
+    dy = np.ones(nx * ny) # length along y-axis of each bar
+    dz = data.ravel() # length along z-axis of each bar (height)
+    ax.bar3d(xx, yy, z, dx, dy, dz)
+    ax.set_xticks(x, PROBLEMS, rotation=30)
+    ax.set_yticks(y, [f'{s}_{h}' for (s, h) in fd_configurations])
+    plt.savefig(filename, dpi=200)
+
+
+def faulty_oracle(df, name):
+    """
+    First intuition thought Friday 21/10.
+    """
+    df['faulty_oracle'] = df['result'] + df['node_cost'] - df['source_result']
+    df.loc[df.faulty_oracle==0, name] = 0
+    df.loc[~(df.faulty_oracle==0), name] = 1
+    df = df.astype({name: int})
+    return df
+
+
 # exec(open('simulate_framework.py').read())
 if __name__ == '__main__':
     print(f'number of problems: {len(PROBLEMS)}')
     print(f'number of configurations: {len(CONFIGURATIONS)}')
 
-    # builds .csv file caches to avoid redundant mutants executions
-    main_build_cache()
-    # builds the results that can only have to be executed once
-    main_build_deterministic_results()
-    main_build_random_results()
-    # regroups them
-    regroup_results(NB_TESTS)
-    # executes the first experiment
-    main_test_mutants_selection_impact()
-    # executes the second experiment
-    main_fd_results()
+
+    # defines the fast-downward settings for testing
+    searches = ['astar', 'wastar']
+    evals = ['ff', 'add', 'cea', 'cg', 'goalcount']
+    fd_configurations = [(s, e) for s in searches for e in evals]
+    result_dfs = []
+    pool = multiprocessing.Pool(processes=NB_THREADS)
+
+    relevant_problems = ['airport07', 'blocks01', 'gripper01', 'miconic02', 'miconic03', 'openstacks01', 'pegsol04', 'pegsol05', 'pegsol06', 'tpp03', 'transport01']
+
+
+    error_problems = ['airport06', 'airport07', 'pegsol04', 'pegsol05', 'pegsol06', 'blocks01', 'gripper01', 'miconic02', 'openstacks01', 'tpp03', 'travel02', 'miconic03', 'transport01']
+
+    for p in error_problems:
+        # remove_cache(p)
+        generate_framework(p)
+        exit(10)
+    exit(10)
+    # for problem in PROBLEMS:
+    #     make_mt_cache_file_from_csv(problem, CONFIGURATIONS)
+
+    # selects the state with the oracle (but it looks like too many states kill all the mutants)
+    # for problem in relevant_problems:
+    #     df = pd.read_csv(problem_result_filepath(problem))
+    #     df = df.loc[df.error==0]
+    #     df['optimal'] = df['result'] + df['node_cost'] - df['source_result']
+    #     df.loc[df.optimal==0, 'a'] = 0
+    #     df.loc[~(df.optimal==0), 'a'] = 1
+    #     df = df.astype({'a': int})
+    #     indexes = df.groupby(['node_index'], as_index=False).sum().sort_values(by='a', ascending=False, inplace=False)['node_index'].head(NB_TESTS).tolist()
+    #     # counts = np.unique(np.array(df.groupby(['node_index'], as_index=False).sum().sort_values(by='a', ascending=False, inplace=False)['a'].tolist()), return_counts=True)
+    #     update_cache(problem, indexes)
+
+    my_args = get_arguments([('wastar', 'ff')], error_problems, 500, ['select_bfs'])
+    print(f'{len(my_args)} executions are about to be launched.')
+    pool.starmap(run_framework_fd_planner, my_args, chunksize=3)
+    result_fps = list(map(lambda x: x[4], my_args))
+    indexes_df = regroup_framework_result_dataframes(result_fps)
+    indexes_df.replace(to_replace={'select_bfs': 'bfs'}, inplace=True)
+    indexes_df.to_csv('fd_fixed_bfs.csv', index=0)
+    print(indexes_df.loc[indexes_df.error==1]['problem'].unique().tolist())
+    for result_fp in result_fps:
+        os.remove(result_fp)
+
+
+    # for fp in ['i1.csv', 'i2.csv']:
+    #     df1 = pd.read_csv(fp)
+    #     df = df1.copy()
+    #     df['optimal'] = df['result'] + df['node_cost'] - df['source_result']
+    #     df.loc[df.optimal==0, 'a'] = 0
+    #     df.loc[~(df.optimal==0), 'a'] = 1
+    #     df = df.astype({'a': int})
+    #     df['failure'] = df['a']
+    #     df['generator'] = 'a'
+    # plot_mutation_coverage(pd.concat([df1, df], ignore_index=True), fp.split('.')[0] + '.png')
+
+
+    def transform_row(r):
+        if not r.generator.startswith('walks'):
+            costs = [r.source_result, r.result, r.node_cost]
+            costs.sort()
+            r.failure = 1 if costs[2] != costs[1] + costs[0] else 0
+        return r
+
+    df = pd.read_csv('results/fd_results_10.csv')
+

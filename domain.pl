@@ -2,11 +2,13 @@
     [
         domain_actions/2, domain_constants/2, domain_name/2, domain_predicates/2, domain_types/2,
         action_parameters/2, action_preconditions/2, action_positive_effects/2, action_negative_effects/2, untyped_action/2,
-        ground_predicates/4, ground_actions/3, generate_action/1
+        compute_rigid_predicates/4, ground_actions/3, generate_action/1,
+
+        compute_mandatory_facts/3
     ]).
 
 :- use_module(library(ordsets), [ord_subtract/3, ord_union/2, ord_subset/2]).
-:- use_module(library(lists), [maplist/3]).
+:- use_module(library(lists), [maplist/3, maplist/2]).
 :- use_module(library(sets), [is_set/1]).
 
 :- ensure_loaded(blackboard_data).
@@ -130,7 +132,7 @@ instantiate_parameters([Parameter|Ps]) :-
 %% GROUNDING PREDICATES
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-ground_predicates(Domain, Problem, RigidPredicatesNames, RigidFacts) :-
+compute_rigid_predicates(Domain, Problem, RigidPredicatesNames, RigidFacts) :-
     domain_predicates_names(Domain, _PN, _FN, RigidPredicatesNames),
     % format('predicates:\n~p\n\nfluents:\n~p\n\nrigid predicates:\n~p\n\n', [PN, FN, RigidPredicatesNames]),
     % ground the rigid predicates of the current problem
@@ -145,6 +147,13 @@ ground_actions(RigidPredicatesNames, RigidFacts, Operators) :-
         action_preconditions(A, P), filter_predicates_with_names(P, RigidPredicatesNames, TmpRF), ord_union(TmpRF, RF), ord_subset(RF, RigidFacts)
     )
     , Operators).
+
+%% mandatory facts are ground predicates that are in State and can't be realised by any action
+% e.g: is-pushing predicate in airport06 domain
+compute_mandatory_facts(State, Operators, MandatoryFacts) :-
+    maplist(action_positive_effects, Operators, PosSets),
+    findall(S, (member(S, State), maplist(nonmember(S), PosSets)), Tmp),
+    sort(Tmp, MandatoryFacts).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HELPERS

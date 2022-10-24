@@ -3,7 +3,9 @@
         set_blackboard/4, set_blackboard/3, set_source_result/1, set_nb_tests/1, set_final_state/1,
         get_problem/1, get_domain/1, get_actions/1, get_objects/1, get_constants/1,
         get_source_result/1, get_configuration/1, get_cache_name/1, get_final_state/1,
-        get_operators/1, get_untyped_variables/1, get_typed_variables/1
+        get_operators/1, get_untyped_variables/1, get_typed_variables/1,
+
+        get_mf/1
     ]).
 
 :- use_module(library(sets), [subtract/3]).
@@ -37,11 +39,15 @@ set_blackboard(Domain, Problem, CacheName) :-
     domain_predicates(Domain, Predicates),
     bb_put(predicates, Predicates),
     compute_variables(Domain, Problem),
-    ground_predicates(Domain, Problem, RigidPredicatesNames, RigidFacts),
+    compute_rigid_predicates(Domain, Problem, RigidPredicatesNames, RigidFacts),
     % length(RigidFacts, LRF), format('~d ground rigid facts found.\n', [LRF]),
     ground_actions(RigidPredicatesNames, RigidFacts, Operators),
     % length(Operators, LO), format('~d ground actions found.\n', [LO]),
-    bb_put(operators, Operators).
+    bb_put(operators, Operators),
+    problem_initial_state(Problem, InitialState),
+    compute_mandatory_facts(InitialState, Operators, MandatoryFacts),
+    bb_put(mf, MandatoryFacts).
+
 
 set_source_result(SourceResult) :-
     bb_put(source_result, SourceResult).
@@ -79,6 +85,8 @@ get_untyped_variables(UntypedVariables) :- bb_get(untyped_variables, UntypedVari
 get_typed_variables(TypedVariables) :- bb_get(typed_variables, TypedVariables).
 
 get_operators(Operators) :- bb_get(operators, Operators).
+
+get_mf(MandatoryFacts) :- bb_get(mf, MandatoryFacts).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% VARIABLES PREDICATES
