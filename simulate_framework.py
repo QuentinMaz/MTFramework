@@ -41,8 +41,9 @@ DETERMINISTIC_STATIC_GENERATORS = ['bfs'] # ['min_dist_i', 'min_dist_g', 'max_di
 NB_RANDOM_WALKS_REPETITIONS = 3
 NB_RANDOM_REPETITIONS = 10
 NB_TESTS = 10
-NB_THREADS = 3
+NB_THREADS = 19
 NO_DIGIT_REGEX = re.compile('(\D+)')
+SASAK_TIMEOUT = 120000
 
 f = open(JSON_SOURCE_RESULTS_COSTS_FP, 'r')
 source_results_costs = json.loads(f.read())
@@ -64,6 +65,21 @@ def get_arguments(configurations: list[tuple[str, str]], problems: list[str], n:
             result_filename = f'results/{s}_{h}_{problem}.csv'
             output_filename = f'tmp/{s}_{h}_{problem}.txt'
             arg = (f'benchmarks/{domain_name}/{domain}.pddl', f'benchmarks/{domain_name}/task{i}.pddl', (s, h), n, result_filename, output_filename, generators)
+            args.append(arg)
+    return args
+
+
+def get_sasak_arguments(configurations: list[tuple[str, str, str]], problems: list[str], n: int, generators: list[str]) -> list[tuple[str, str, tuple[str, str], int, str, str, list[str]]]:
+    args = []
+    for problem in problems:
+        m = PROBLEM_REGEX.match(problem)
+        domain_name = m.group(1)
+        i = m.group(2)
+        domain = 'domain' if 'domain.pddl' in os.listdir(f'benchmarks/{domain_name}') else f'domain{i}'
+        for (v, s, h) in configurations:
+            result_filename = f'results/{v}_{s}_{h}_{problem}.csv'
+            output_filename = f'tmp/{v}_{s}_{h}_{problem}.txt'
+            arg = (f'benchmarks/{domain_name}/{domain}.pddl', f'benchmarks/{domain_name}/task{i}.pddl', (v, s, h), n, result_filename, output_filename, generators)
             args.append(arg)
     return args
 
@@ -105,6 +121,19 @@ def run_framework_fd_planner(domain_filename: str, problem_filename: str, config
         subprocess.run(command, stdout=subprocess.DEVNULL)
     except:
         print(f'{configuration[0]}_{configuration[1]}  error with args: {domain_filename} {problem_filename} {nb_tests} {generators}.')
+
+
+def run_framework_sasak_planner(domain_filename: str, problem_filename: str, configuration: tuple[str, str, str], nb_tests: int, result_filename: str, output_filename: str, generators: list[str]) -> None:
+    """
+    Runs a sasak planner, defined by a search and a heuristic, and returns the execution time.
+    """
+    # the execution time is limited to 120s
+    planner_command = f'"planners/{configuration[0]}/{configuration[1]}_{configuration[2]}.exe {SASAK_TIMEOUT}"'
+    command = f'main.exe {domain_filename} {problem_filename} {planner_command} {nb_tests} {result_filename} {output_filename} {" ".join(generators)}'
+    try:
+        subprocess.run(command, stdout=subprocess.DEVNULL)
+    except:
+        print(f'error when running main.exe on {planner_command} with args: {domain_filename} {problem_filename} {nb_tests} {generators}.')
 
 
 def simulate_framework(domain_filename: str, problem_filename: str, nb_tests: int, generator: str, result_arg: str) -> list[int]:
@@ -435,7 +464,7 @@ def get_framework_result_dataframe(filepath: str) -> pd.DataFrame:
     f.close()
 
     df = pd.read_csv(filepath, header=1)
-    df.drop(['execution_time(sec)'], axis=1, inplace=True)
+    # df.drop(['execution_time(sec)'], axis=1, inplace=True)
     df.insert(0, 'planner', planner_name, allow_duplicates=True)
     df.insert(1, 'problem', problem_name, allow_duplicates=True)
     df.insert(len(df.columns), 'source_result', source_result_cost, allow_duplicates=True)
@@ -766,17 +795,86 @@ def n_scaling_mutation_coverage(df: pd.DataFrame, n_max: int, filename: str=None
 
 
 ######################################################################################################################################################
+############################################################## OPTIMAL FAULTS DETECTION ##############################################################
+
+
+def dataframe_detection_results(df: pd.DataFrame, filename: str=None) -> pd.DataFrame:
+    df = df.loc[df.error==0]
+    planners = df['planner'].unique().tolist()
+    problems = df['problem'].unique().tolist()
+    scores = {g: [] for g in planners}
+
+    for planner in planners:
+        planner_df = df.loc[df.planner==planner]
+        for problem in problems:
+            problem_df = planner_df.loc[planner_df.problem==problem]
+            if problem_df.empty:
+                print(f'no data for {problem} {problem}')
+                scores[planner].append('$N/A$')
+            else:
+                scores[planner].append('\\xmark' if len(problem_df.loc[problem_df.failure==1]) == 0 else '\cmark')
+
+    # regroups the results
+    fd_scores = {}
+    regrouped_scores = {}
+    for k, v in scores.items():
+        name = k.split('_')
+        if len(name) == 2:
+            fd_scores[k] = v
+        else:
+            name = f'${"V0" if name[0] == "unpatched" else "V1"}_{{{name[2]}}}$'
+            if v not in list(regrouped_scores.values()):
+                regrouped_scores[name] = v
+    fd_planners = list(fd_scores.keys())
+    regrouped = []
+    long_column = False
+    for fd_planner in fd_planners:
+        if fd_planner not in regrouped:
+            fd_planner_score = fd_scores[fd_planner]
+            same_result = [p for p in fd_planners if p != fd_planner and fd_scores[p] == fd_planner_score]
+            if same_result != []:
+                regrouped += same_result
+                name = f'${fd_planner.split("_")[0].capitalize()[0]}_'
+                name += '{'
+                name += fd_planner.split('_')[1]
+                for planner_name in same_result:
+                    name += f',{planner_name.split("_")[1]}'
+                name +='}$'
+            else:
+                name = f'${fd_planner.split("_")[0].capitalize()[0]}_{{{fd_planner.split("_")[1]}}}$'
+            if len(name) >= 20:
+                name = f'${fd_planner.split("_")[0].capitalize()[0]}$'
+                long_column = name
+            regrouped_scores[name] = fd_planner_score
+
+    result_df = pd.DataFrame(data=regrouped_scores, index=problems)
+    
+    if long_column != False:
+        column_to_move = result_df.pop(long_column)
+        result_df.insert(len(result_df.columns), long_column, column_to_move, allow_duplicates=True)
+
+    if filename != None:
+        if filename.endswith('.tex'):
+            result_df.to_latex(filename, escape=False)
+        elif filename.endswith('.csv'):
+            result_df.to_csv(filename, index_label='problem')
+        else:
+            print('filename extension not supported.')
+    return result_df
+
+
+######################################################################################################################################################
 ############################################################## MAIN ##################################################################################
 
 
 def main_test_mutants_selection_impact():
     """
     main() for studying the impact of various subsets of mutants on the methodology performance.
+    It corresponds to the first experiment.
     """
     n = NB_TESTS
     problems = PROBLEMS
     configurations = CONFIGURATIONS
-    # print(f'nb configurations: {len(configurations)}', f'nb problems: {len(problems)}')
     """
     Here, 22 mutants are available. We state the following propositions as 'intuitive':
         - In order to do proper mutation testing, the validation mutant set has to be at least of size 10.
@@ -830,7 +928,7 @@ def main_test_mutants_selection_impact():
 
 def main_build_deterministic_results():
     """
-    main() for building all the deterministic results. They do not depend on anything so they just need to be run once.
+    main() for building results that do not depend on anything so they just need to be run once.
     """
     my_args = [(problem, CONFIGURATIONS, NB_TESTS) for problem in PROBLEMS]
     print(f'{len(my_args)} executions are about to be launched.')
@@ -851,72 +949,75 @@ def main_build_random_results():
     regroup_random_select_results(NB_TESTS)
 
 
-def main_fd_results():
-    deterministic_generators = {
-        'select_bfs': 'bfs',
+def main_second_experiment():
+    """
+    main() for studying the applicability of the MorphinPlan methodology to reveal eventual optimality faults in AI planners.
+    It corresponds to the second experiment.
+    The planners tested are the following:
+        - Unpatched version of the original Robert Sasak's implementation (back in 2010).
+        - Patched version of the original Robert Sasak's implementation (fixed by Tobias Opsahl in 2021).
+        - Optimal settings of the FastDownward planning system.
+        - Not necessarily optimal settings of the FastDownward planning system.
+
+    Note that revealing optimal faults among the results of the non-optimal FD planners is expected (they are tested to evaluate MorphinPlan's approach). 
+    """
+    generators = {
         'select_mutants_killers': 'mutant'
     }
     # creates the cache files for all the problems considering all the mutants (as we test fast-downward planners here)
     for problem in PROBLEMS:
         make_mt_cache_file_from_csv(problem, CONFIGURATIONS)
 
-    # defines the fast-downward settings for testing
-    searches = ['astar', 'wastar']
-    evals = ['ff', 'add', 'cea', 'cg', 'goalcount']
-    fd_configurations = [(s, e) for s in searches for e in evals]
-    result_dfs = []
+    # defines the non-optimal fast-downward settings for testing
+    fd_searches = ['astar', 'wastar']
+    fd_evals = ['ff', 'add', 'cea', 'cg', 'goalcount']
+    fd_configurations = [(s, e) for s in fd_searches for e in fd_evals]
+    # adds optimal settings
+    admissible_fd_heuristics = ['blind', 'cegar', 'hmax', 'lmcut', 'cpdbs', 'pdb', 'zopdbs'] # hm timeouts on airport domain
+    for h in admissible_fd_heuristics:
+        fd_configurations.append(('astar', h))
     pool = multiprocessing.Pool(processes=NB_THREADS)
 
-    # runs the deterministic results (once)
-    my_args = get_arguments(fd_configurations, PROBLEMS, NB_TESTS, list(deterministic_generators.keys()))
-    print(f'{len(my_args)} executions are about to be launched.')
-    pool.starmap(run_framework_fd_planner, my_args, chunksize=3)
+    # executes MorphinPlan
+    my_fd_args = get_arguments(fd_configurations, PROBLEMS, NB_TESTS, list(generators.keys()))
+    print(f'{len(my_fd_args)} executions are about to be launched.')
+    pool.starmap(run_framework_fd_planner, my_fd_args, chunksize=3)
 
     # regroups the results and cleans the result subfiles
-    result_fps = list(map(lambda x: x[4], my_args))
-    deterministic_result_df = regroup_framework_result_dataframes(result_fps)
-    deterministic_result_df.replace(to_replace=deterministic_generators, inplace=True)
+    fd_result_fps = list(map(lambda x: x[4], my_fd_args))
+    fd_result_df = regroup_framework_result_dataframes(fd_result_fps)
+    fd_result_df.replace(to_replace=generators, inplace=True)
     # saves the dataframe for safety
-    deterministic_result_df.to_csv(f'results/deterministic_fd_results_{NB_TESTS}.csv', index=0)
-    for result_fp in result_fps:
-        os.remove(result_fp)
-    result_dfs.append(deterministic_result_df)
+    fd_result_df.to_csv(f'results/fd_results_{NB_TESTS}.csv', index=0)
+    for fd_result_fp in fd_result_fps:
+        os.remove(fd_result_fp)
 
-    # runs the non-deterministic results NB_RANDOM_REPETITIONS times
-    for i in range(NB_RANDOM_REPETITIONS):
-        my_args = get_arguments(fd_configurations, PROBLEMS, NB_TESTS, ['select_random', 'walks_generator'])
-        print(f'{len(my_args)} executions are about to be launched.')
-        pool.starmap(run_framework_fd_planner, my_args, chunksize=3)
-        result_fps = list(map(lambda x: x[4], my_args))
-        regroup_framework_result_dataframes(result_fps, f'results/random_{i}_fd_results_{NB_TESTS}.csv')
-        for result_fp in result_fps:
-            os.remove(result_fp)
-    # regroups the non-deterministic results
-    for i in range(NB_RANDOM_REPETITIONS):
-        random_result_fp = f'results/random_{i}_fd_results_{NB_TESTS}.csv'
-        random_result_df = pd.read_csv(random_result_fp)
-        # post-processes the results by renaming the names of the generator
-        random_result_df.replace(to_replace={'select_random' : f'random{i}', 'walks_generator' : f'walks{i}'}, inplace=True)
-        # ... thus overwrites every original result subfile
-        random_result_df.to_csv(random_result_fp, index=0)
-        result_dfs.append(random_result_df.copy())
-
-    # concatenates all the results
-    result_df = pd.concat(result_dfs, ignore_index=True)
-    # saves the final result dataframe for safety, as it can then be used with plot_overall_performance() for example
-    result_df.to_csv(f'results/fd_results_{NB_TESTS}.csv', index=0)
-    dataframe_mutation_coverage(result_df, f'results/fd_results_{NB_TESTS}_coverage.csv')
-    n_scaling_mutation_coverage(result_df, NB_TESTS,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage.csv')
-    # exports n scaling detection coverage results as a latex considering all the problems
-    n_scaling_mutation_coverage(result_df, NB_TESTS,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage.tex')
-    plot_mutation_coverage(result_df, f'results/fd_results_{NB_TESTS}_coverage.png')
-
-    # the results shown in the paper only consider relevant problems, i.e problems for which at least a detection happened
-    paper_df = pd.concat([result_df.loc[result_df.problem==p] for p in result_df['problem'].unique().tolist() if not result_df.loc[(result_df.problem==p) & (result_df.failure==1)].empty], ignore_index=True)
-    plot_mutation_coverage(paper_df, f'results/fd_results_{NB_TESTS}_coverage.png')
-    n_scaling_mutation_coverage(paper_df, NB_TESTS,  f'results/fd_results_{NB_TESTS}_n_scaling_coverage.png')
-
-
+    # 16 problems are available: parsing issues occured with 'tpp03', 'transport01' and 'openstacks01'
+    problems = ['airport06', 'airport07', 'blocks01', 'blocks02', 'blocks03', 'gripper01', 'miconic02', 'miconic03', 'pegsol04', 'pegsol05', 'pegsol06', 'psr-small03', 'psr-small06', 'psr-small08', 'psr-small09', 'travel02']
+    versions = ['unpatched', 'patched']
+    sasak_result_dfs = []
+    for version in versions:
+        sasak_configurations = [(version, 'fastar', 'h0'), (version, 'fastar', 'hmax')]
+        my_sasak_args = get_sasak_arguments(sasak_configurations, problems, NB_TESTS, list(generators.keys()))
+        print(f'{len(my_sasak_args)} executions are about to be launched.')
+        pool.starmap(run_framework_sasak_planner, my_sasak_args, chunksize=3 if len(my_sasak_args) >= NB_THREADS else 1)
+        sasak_result_fps = list(map(lambda x: x[4], my_sasak_args))
+        sasak_result_df = regroup_framework_result_dataframes(sasak_result_fps)
+        sasak_result_df.replace(to_replace=generators, inplace=True)
+        sasak_result_df.replace(to_replace={'fastar_h0': f'{version}_astar_h0', 'fastar_hmax': f'{version}_astar_hmax'}, inplace=True)
+        sasak_result_df.to_csv(f'results/{version}_sasak_results_{NB_TESTS}.csv', index=0)
+        for sasak_result_fp in sasak_result_fps:
+            os.remove(sasak_result_fp)
+        sasak_result_dfs.append(sasak_result_df)
+    # saves the dataframe containing the results of all versions for safety
+    pd.concat(sasak_result_dfs, ignore_index=True).to_csv(f'results/sasak_results_{NB_TESTS}.csv', index=0)
+    # saves a dataframe with all the results
+    result_df = pd.concat([*sasak_result_dfs, fd_result_df], ignore_index=True)
+    result_df.to_csv(f'results/second_experiment_results_{NB_TESTS}.csv', index=0)
+    dataframe_detection_results(result_df, f'results/second_experiment_results_{NB_TESTS}.tex')
+    return result_df
+    
+    
 def main_build_cache():
     args = []
     for problem in PROBLEMS:
@@ -952,4 +1053,4 @@ if __name__ == '__main__':
     # executes the first experiment
     main_test_mutants_selection_impact()
     # executes the second experiment
-    main_fd_results()
+    main_second_experiment()
