@@ -51,13 +51,13 @@ write_csv_record_result(CsvFileStream, Result) :-
 
 %% --test predicates
 write_nodes_csv_header(Stream) :-
-    Header = [node_index, node_cost, search, heuristic, failure, error, result, source_result],
+    Header = [node_index, node_cost, search, heuristic, failure, error, result, source_result, 'execution_time(sec)'],
     list_to_comma_seperated_list(Header, CsvHeader),
     write_list(Stream, CsvHeader).
 
 write_nodes_csv_records(_, []).
-write_nodes_csv_records(Stream, [result(I, C, S, H, F, E, RC, SRC)|Tail]) :-
-    list_to_comma_seperated_list([I, C, S, H, F, E, RC, SRC], CsvResult),
+write_nodes_csv_records(Stream, [result(I, C, S, H, F, E, RC, SRC, ET)|Tail]) :-
+    list_to_comma_seperated_list([I, C, S, H, F, E, RC, SRC, ET], CsvResult),
     write_list(Stream, CsvResult),
     write_nodes_csv_records(Stream, Tail).
 

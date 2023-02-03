@@ -201,36 +201,88 @@ start :-
 start :-
     prolog_flag(argv, ['--test', DomainFilepath, ProblemFilepath, OutputFilename|PlannersCommands]),
     !,
-    make_deep_mutants_cache(DomainFilepath, ProblemFilepath, OutputFilename, PlannersCommands),
+    make_deep_mutants_cache(DomainFilepath, ProblemFilepath, OutputFilename, PlannersCommands, ExecutionTimes),
+    write_indexes(ExecutionTimes),
+    halt.
+start :-
+    prolog_flag(argv, ['--state_generation', DomainFilepath, ProblemFilepath, OutputFilepath]),
+    !,
+    make_input(DomainFilepath, ProblemFilepath, Domain, Problem, _CacheName),
+    set_blackboard(Domain, Problem, _CacheName),
+    statistics(walltime, [StartTime, _]),
+    bfs_generator(500, Nodes),
+    save_nodes(OutputFilepath, Nodes),
+    statistics(walltime, [CurrentTime, _]),
+    ExecutionTime is (CurrentTime - StartTime) / 1000,
+    write(ExecutionTime),
+    nl,
+    halt.
+start :-
+    prolog_flag(argv, ['--random_walk_generation', DomainFilepath, ProblemFilepath, NAtom, SRCAtom]),
+    !,
+    now(Time),
+    setrand(Time),
+    statistics(walltime, [StartTime, _]),
+    atom_to_int(NAtom, N),
+    atom_to_int(SRCAtom, MaximumWalkLength),
+    make_input(DomainFilepath, ProblemFilepath, Domain, Problem, CacheName),
+    set_blackboard(Domain, Problem, CacheName),
+    load_nodes_or_generate(CacheName, Nodes),
+    compute_reachable_nodes(N, MaximumWalkLength, Nodes, NewN),
+    random_walks_generator(NewN, MaximumWalkLength, _Results),
+    statistics(walltime, [CurrentTime, _]),
+    ExecutionTime is (CurrentTime - StartTime) / 1000,
+    write(ExecutionTime),
+    nl,
     halt.
 start :-
     prolog_flag(argv, ['--bfs', DomainFilepath, ProblemFilepath, NAtom, SRCAtom]),
     !,
-    bfs_nodes_indexes(DomainFilepath, ProblemFilepath, NAtom, SRCAtom, Results),
+    statistics(walltime, [StartTime, _]),
+    bfs_nodes_indexes(DomainFilepath, ProblemFilepath, NAtom, SRCAtom, Indexes),
+    statistics(walltime, [CurrentTime, _]),
+    ExecutionTime is (CurrentTime - StartTime) / 1000,
+    append(Indexes, [ExecutionTime], Results),
     write_indexes(Results),
     halt.
 start :-
     prolog_flag(argv, ['--min_dist_i', DomainFilepath, ProblemFilepath, NAtom, SRCAtom]),
     !,
-    dist_i_nodes_indexes(DomainFilepath, ProblemFilepath, min, NAtom, SRCAtom, Results),
+    statistics(walltime, [StartTime, _]),
+    dist_i_nodes_indexes(DomainFilepath, ProblemFilepath, min, NAtom, SRCAtom, Indexes),
+    statistics(walltime, [CurrentTime, _]),
+    ExecutionTime is (CurrentTime - StartTime) / 1000,
+    append(Indexes, [ExecutionTime], Results),
     write_indexes(Results),
     halt.
 start :-
     prolog_flag(argv, ['--max_dist_i', DomainFilepath, ProblemFilepath, NAtom, SRCAtom]),
     !,
-    dist_i_nodes_indexes(DomainFilepath, ProblemFilepath, max, NAtom, SRCAtom, Results),
+    statistics(walltime, [StartTime, _]),
+    dist_i_nodes_indexes(DomainFilepath, ProblemFilepath, max, NAtom, SRCAtom, Indexes),
+    statistics(walltime, [CurrentTime, _]),
+    ExecutionTime is (CurrentTime - StartTime) / 1000,
+    append(Indexes, [ExecutionTime], Results),
     write_indexes(Results),
     halt.
 start :-
     prolog_flag(argv, ['--min_dist_g', DomainFilepath, ProblemFilepath, NAtom, SourceResultFilepath]),
     !,
-    dist_g_nodes_indexes(DomainFilepath, ProblemFilepath, min, NAtom, SourceResultFilepath, Results),
+    statistics(walltime, [StartTime, _]),
+    dist_g_nodes_indexes(DomainFilepath, ProblemFilepath, min, NAtom, SourceResultFilepath, Indexes),
+    statistics(walltime, [CurrentTime, _]),
+    ExecutionTime is (CurrentTime - StartTime) / 1000,
+    append(Indexes, [ExecutionTime], Results),
     write_indexes(Results),
     halt.
 start :-
     prolog_flag(argv, ['--max_dist_g', DomainFilepath, ProblemFilepath, NAtom, SourceResultFilepath]),
     !,
-    dist_g_nodes_indexes(DomainFilepath, ProblemFilepath, max, NAtom, SourceResultFilepath, Results),
+    statistics(walltime, [StartTime, _]),
+    dist_g_nodes_indexes(DomainFilepath, ProblemFilepath, max, NAtom, SourceResultFilepath, Indexes),
+    statistics(walltime, [CurrentTime, _]),
+    ExecutionTime is (CurrentTime - StartTime) / 1000,
+    append(Indexes, [ExecutionTime], Results),
     write_indexes(Results),
     halt.
 start :-
@@ -238,7 +290,11 @@ start :-
     !,
     now(Time),
     setrand(Time),
-    random_nodes_indexes(DomainFilepath, ProblemFilepath, NAtom, SRCAtom, Results),
+    statistics(walltime, [StartTime, _]),
+    random_nodes_indexes(DomainFilepath, ProblemFilepath, NAtom, SRCAtom, Indexes),
+    statistics(walltime, [CurrentTime, _]),
+    ExecutionTime is (CurrentTime - StartTime) / 1000,
+    append(Indexes, [ExecutionTime], Results),
     write_indexes(Results),
     halt.
 start :-
@@ -487,19 +543,28 @@ select_nodes(DF, PF, problem(N, D, R, OD, _, G, C, MS, LS), [_|T1], Index, CP, O
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % pedicate that runs all the cached nodes of a problem on the mutants and stores the results in a .csv file
-make_deep_mutants_cache(DomainFilepath, ProblemFilepath, OutputFilename, PlannersCommands) :-
+make_deep_mutants_cache(DomainFilepath, ProblemFilepath, OutputFilename, PlannersCommands, [TotalExecutionTime|ExecutionTimes]) :-
+    statistics(walltime, [StartTime, _]),
     make_input(DomainFilepath, ProblemFilepath, Domain, Problem, CacheName),
     set_blackboard(Domain, Problem, CacheName), % needed for plan validation and bfs generator if empty cache
-    make_commands(DomainFilepath, ProblemFilepath, OutputFilename, PlannersCommands, Commands),
+    make_commands(DomainFilepath, ProblemFilepath, OutputFilename, PlannersCommands, Commands), % involves running the mutants on the source problems
     load_nodes_or_generate(CacheName, Nodes),
     atom_concat(Tmp, '.txt', CacheName),
     atom_concat(Tmp, '.csv', CsvFilename),
     set_nodes_csv_result(CsvFilename),
-    test_mutants(DomainFilepath, Problem, 0, Nodes,Commands, OutputFilename, CsvFilename).
+    test_mutants(DomainFilepath, Problem, 0, Nodes, Commands, OutputFilename, CsvFilename, MutantExecutionTimesList),
+    (
+        foreach(MutantExecutionTimes, MutantExecutionTimesList),
+        fromto([], In, Out, ExecutionTimes)
+    do
+        append(MutantExecutionTimes, In, Out)
+    ),
+    statistics(walltime, [CurrentTime, _]),
+    TotalExecutionTime is (CurrentTime - StartTime) / 1000.
 
 
-test_mutants(_DomainFilepath, _Problem, _Index, [], _CommandsPairs, _OutputFilename, _CsvFilename).
-test_mutants(DF, problem(N, D, R, OD, _, G, C, MS, LS), Index, [node(State, Cost)|T1], CP, OF, CsvFilename) :-
+test_mutants(_DomainFilepath, _Problem, _Index, [], _CommandsPairs, _OutputFilename, _CsvFilename, []).
+test_mutants(DF, problem(N, D, R, OD, _, G, C, MS, LS), Index, [node(State, Cost)|T1], CP, OF, CsvFilename, [ExecutionTimes|T2]) :-
     NewProblem = problem(N, D, R, OD, State, G, C, MS, LS),
     atom_concat(Tmp, '.txt', OF),
     atom_concat(Tmp, '.pddl', NewProblemFilePath),
@@ -507,9 +572,10 @@ test_mutants(DF, problem(N, D, R, OD, _, G, C, MS, LS), Index, [node(State, Cost
     (
         foreach(command(PC, S, H, SRC), CP),
         fromto([], In, Out, Results),
+        foreach(ET, ExecutionTimes),
         param(DF, NewProblemFilePath, OF, Cost, Index)
     do
-        run_planner_command(PC, DF, NewProblemFilePath, OF, _, _),
+        run_planner_command(PC, DF, NewProblemFilePath, OF, _, ET),
         deserialise_plan(OF, Result),
         length(Result, L),
         (   L = 0 -> (Failure = 0, Error = 1)
@@ -517,11 +583,11 @@ test_mutants(DF, problem(N, D, R, OD, _, G, C, MS, LS), Index, [node(State, Cost
         ;
             (Failure = 0, Error = 0)
         ),
-        Out = [result(Index, Cost, S, H, Failure, Error, L, SRC)|In]
+        Out = [result(Index, Cost, S, H, Failure, Error, L, SRC, ET)|In]
     ),
     write_nodes_csv_results(CsvFilename, Results),
     NewIndex is Index + 1,
-    test_mutants(DF, problem(N, D, R, OD, _, G, C, MS, LS), NewIndex, T1, CP, OF, CsvFilename).
+    test_mutants(DF, problem(N, D, R, OD, _, G, C, MS, LS), NewIndex, T1, CP, OF, CsvFilename, T2).
 
 make_commands(DomainFilepath, ProblemFilepath, OutputFilename, PlannersCommands, Commands) :-
     (

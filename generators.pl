@@ -1,6 +1,6 @@
 :- module(generators,
     [
-        bfs_generator/2, walks_generator/2,
+        bfs_generator/2, walks_generator/2, random_walks_generator/3,
 
         select_min_dist_i/2, select_max_dist_i/2,
         select_min_dist_g/2, select_max_dist_g/2,
@@ -8,6 +8,7 @@
         select_random/2, select_mutants_killers/2,
         select_bfs_indexes/3, select_random_indexes/3,
 
+        compute_reachable_nodes/4,
         validate_plan/1
     ]).
 
