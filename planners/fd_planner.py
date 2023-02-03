@@ -4,7 +4,7 @@ import os
 
 TIMEOUT = 120
 WEIGHT = 10
-FD_PATH = 'c:/Users/Quentin/Downloads/downward'
+FD_PATH = ''
 
 def main(search: str, eval: str, domain: str, problem: str, output: str) -> None:
     sas = f'{output.split(".")[0]}.sas'

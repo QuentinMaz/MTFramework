@@ -54,6 +54,17 @@ f.close()
 ############################################################## LOW ###################################################################################
 
 
+# https://stackoverflow.com/a/20929881
+def is_float(element: any) -> bool:
+    if element is None: 
+        return False
+    try:
+        float(element)
+        return True
+    except ValueError:
+        return False
+
+
 def get_arguments(configurations: list[tuple[str, str]], problems: list[str], n: int, generators: list[str]) -> list[tuple[str, str, tuple[str, str], int, str, str, list[str]]]:
     args = []
     for problem in problems:
@@ -84,7 +95,7 @@ def get_sasak_arguments(configurations: list[tuple[str, str, str]], problems: li
     return args
 
 
-def cache_problem(domain_filename: str, problem_filename: str, output: str, configurations: list[tuple[str, str]]) -> None:
+def cache_problem(domain_filename: str, problem_filename: str, output: str, configurations: list[tuple[str, str]]) -> list[int]:
     """
     Runs the framework to create the .csv cache file of the given problem.
     Basically, the framework applies metamophic testing on all given configurations with all the nodes cached as follow-up test cases.
@@ -95,8 +106,14 @@ def cache_problem(domain_filename: str, problem_filename: str, output: str, conf
     for (s, h) in configurations:
         planners_commands.append(f'"planners/prolog_planner.exe mutated_astar-{s} {HEURISTICS[h]}"')
     command = f'main.exe --test {domain_filename} {problem_filename} {output} {" ".join(planners_commands)}'
-    os.system(command)
-    print('done.')
+    results = [0, 0, 0]
+    try:
+        p = subprocess.run(command, shell=True, capture_output=True)
+        exec_times = [float(l) for l in p.stdout.decode().splitlines() if is_float(l)]
+        results = [exec_times[0], np.sum(exec_times[1:]), exec_times[0] - np.sum(exec_times[1:])]
+    except:
+        print(f'Error when building mutant cache for problem {problem_filename}.')
+    return results
 
 
 def run_framework_prolog_planner(domain_filename: str, problem_filename: str, configuration: tuple[str, str], nb_tests: int, result_filename: str, output_filename: str, generators: list[str]) -> None:
@@ -145,7 +162,8 @@ def simulate_framework(domain_filename: str, problem_filename: str, nb_tests: in
     indexes = []
     try:
         p = subprocess.run(command, capture_output=True)
-        indexes = [int(i) for i in p.stdout.decode().splitlines()]
+        # does not consider the last lines as it is supposed to be the execution time
+        indexes = [int(i) for i in p.stdout.decode().splitlines()[:-1]]
     except:
         print(f'simulate_framework error with args: --{generator} {domain_filename} {problem_filename} {nb_tests} {result_arg}.')
     return indexes
