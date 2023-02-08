@@ -21,20 +21,21 @@ HEURISTICS = {
     'hlength': 'h_state_length',
     'hi': 'h_distance_with_i',
     'hg': 'h_distance_with_g',
-    'hnba': 'h_nb_actions'
+    'hnba': 'h_nb_actions',
+    'h0': 'h_zero'
 }
 source_results_costs = {}
-CONFIGURATIONS = [('f5', 'hi'), ('f5', 'hlength'), ('f5', 'hnba'), ('f2', 'hdiff'), ('f2', 'hlength'), ('f2', 'hnba'), ('f4', 'hg'), ('f4', 'hdiff'), ('f4', 'hi'), ('f4', 'hlength'), ('f4', 'hmax'), ('f4', 'hnba'), ('f3', 'hg'), ('f3', 'hdiff'), ('f3', 'hi'), ('f3', 'hlength'), ('f3', 'hmax'), ('f3', 'hnba'), ('f6', 'hg'), ('f6', 'hi'), ('f6', 'hlength'), ('f6', 'hnba')]
+CONFIGURATIONS = [('f4', 'hi'), ('f4', 'hlength'), ('f4', 'hnba'), ('f1', 'hdiff'), ('f1', 'hlength'), ('f1', 'hnba'), ('f3', 'hg'), ('f3', 'hdiff'), ('f3', 'hi'), ('f3', 'hlength'), ('f3', 'hmax'), ('f3', 'hnba'), ('f2', 'hg'), ('f2', 'hdiff'), ('f2', 'hi'), ('f2', 'hlength'), ('f2', 'hmax'), ('f2', 'hnba'), ('f5', 'hg'), ('f5', 'hi'), ('f5', 'hlength'), ('f5', 'hnba')]
 PLANNERS = [f'{s}_{h}' for (s, h) in CONFIGURATIONS]
 PROBLEM_REGEX = re.compile('(.+)(\d\d)')
 GENERATORS_LATEX = {
     # static result keys
     'mutant': '$MorphinPlan$',
-    'bfs': '$NoSelect$',
-    'random': '$RandomSelect$',
+    'bfs': 'bfs_det',#'$NoSelect$',
+    'random': 'bfs_ran',# '$RandomSelect$',
     'random_std': '$S^{std}_{random}$',
     # dynamic result keys
-    'walks': '$RandomWalks$', # main_fd_results
+    'walks': 'ran_wal',#'$RandomWalks$', # main_fd_results
     'walks_std': '$R^{std}_{walks}$' # main_fd_results
 }
 DETERMINISTIC_STATIC_GENERATORS = ['bfs'] # ['min_dist_i', 'min_dist_g', 'max_dist_i', 'max_dist_g', 'bfs', 'mutant', 'select_mutants_killers']
@@ -827,7 +828,7 @@ def dataframe_detection_results(df: pd.DataFrame, filename: str=None) -> pd.Data
         for problem in problems:
             problem_df = planner_df.loc[planner_df.problem==problem]
             if problem_df.empty:
-                print(f'no data for {problem} {problem}')
+                print(f'no data for {planner} {problem}')
                 scores[planner].append('$N/A$')
             else:
                 scores[planner].append('\\xmark' if len(problem_df.loc[problem_df.failure==1]) == 0 else '\cmark')
@@ -1072,3 +1073,9 @@ if __name__ == '__main__':
     main_test_mutants_selection_impact()
     # executes the second experiment
     main_second_experiment()
+
+    # df = pd.read_csv('results/final_results_20_10.csv')
+    # plot_overall_performance(df, f'results/overall_efficiency_{20}_{NB_TESTS}.png')
+
+    # n_scaling_mutation_coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('n_scaling_mutation_coverage') and f.endswith('.csv')]
+    # merge_n_scaling_result_dataframe_latex(n_scaling_mutation_coverage_fps, f'results/n_scaling_mutation_coverage_{20}_{10}.png')
