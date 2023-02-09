@@ -96,25 +96,39 @@ def get_sasak_arguments(configurations: list[tuple[str, str, str]], problems: li
     return args
 
 
-def cache_problem(domain_filename: str, problem_filename: str, output: str, configurations: list[tuple[str, str]]) -> list[int]:
+def cache_problem(domain_filename: str, problem_filename: str, output_filename: str, configurations: list[tuple[str, str]]) -> list[float]:
     """
     Runs the framework to create the .csv cache file of the given problem.
     Basically, the framework applies metamophic testing on all given configurations with all the nodes cached as follow-up test cases.
-    The results are then saved and exported in a .csv file. It is time and resources consuming but it avoids any other mutant planner execution as
+    The results are then saved and exported in a .csv file. It is time and resource consuming but it avoids any other mutant planner execution as
     the future selected states and their related results will be based with such a .csv file.
+    Returns a list of 3 floats: total execution time, total mutants' execution times, framework's induced execution time (total exec. time - the ones induced by the mutants).
     """
     planners_commands = []
     for (s, h) in configurations:
         planners_commands.append(f'"planners/prolog_planner.exe mutated_astar-{s} {HEURISTICS[h]}"')
-    command = f'main.exe --test {domain_filename} {problem_filename} {output} {" ".join(planners_commands)}'
-    results = [0, 0, 0]
+    command = f'main.exe --test {domain_filename} {problem_filename} {output_filename} {" ".join(planners_commands)}'
+    execution_times = [0.0, 0.0, 0.0]
     try:
         p = subprocess.run(command, shell=True, capture_output=True)
         exec_times = [float(l) for l in p.stdout.decode().splitlines() if is_float(l)]
-        results = [exec_times[0], np.sum(exec_times[1:]), exec_times[0] - np.sum(exec_times[1:])]
+        execution_times = [exec_times[0], np.sum(exec_times[1:]), exec_times[0] - np.sum(exec_times[1:])]
     except:
         print(f'Error when building mutant cache for problem {problem_filename}.')
-    return results
+    return execution_times
+
+
+# def cache_problem_multithread(domain_filename: str, problem_filename: str, output_filename: str, configurations: list[tuple[str, str]]) -> list[list[float]]:
+#     """
+#     Not used.
+#     Let the execution time analysis of the framework run faster by enabling multithreading.
+#     Each thread considers a single configuration and creates its own cache file.
+#     """
+#     my_args = [(domain_filename, problem_filename, f'{s}_{h}_{output_filename}', [(s, h)]) for (s, h) in configurations]
+#     print(f'{len(my_args)} executions are about to be launched.')
+#     pool = multiprocessing.Pool(processes=NB_THREADS)
+#     results = pool.starmap(cache_problem, my_args, chunksize=1)
+#     return results
 
 
 def run_framework_prolog_planner(domain_filename: str, problem_filename: str, configuration: tuple[str, str], nb_tests: int, result_filename: str, output_filename: str, generators: list[str]) -> None:
@@ -1073,9 +1087,3 @@ if __name__ == '__main__':
     main_test_mutants_selection_impact()
     # executes the second experiment
     main_second_experiment()
-
-    # df = pd.read_csv('results/final_results_20_10.csv')
-    # plot_overall_performance(df, f'results/overall_efficiency_{20}_{NB_TESTS}.png')
-
-    # n_scaling_mutation_coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('n_scaling_mutation_coverage') and f.endswith('.csv')]
-    # merge_n_scaling_result_dataframe_latex(n_scaling_mutation_coverage_fps, f'results/n_scaling_mutation_coverage_{20}_{10}.png')

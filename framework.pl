@@ -543,14 +543,15 @@ select_nodes(DF, PF, problem(N, D, R, OD, _, G, C, MS, LS), [_|T1], Index, CP, O
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % pedicate that runs all the cached nodes of a problem on the mutants and stores the results in a .csv file
-make_deep_mutants_cache(DomainFilepath, ProblemFilepath, OutputFilename, PlannersCommands, [TotalExecutionTime|ExecutionTimes]) :-
+make_deep_mutants_cache(DomainFilepath, ProblemFilepath, Output, PlannersCommands, [TotalExecutionTime|ExecutionTimes]) :-
     statistics(walltime, [StartTime, _]),
     make_input(DomainFilepath, ProblemFilepath, Domain, Problem, CacheName),
     set_blackboard(Domain, Problem, CacheName), % needed for plan validation and bfs generator if empty cache
-    make_commands(DomainFilepath, ProblemFilepath, OutputFilename, PlannersCommands, Commands), % involves running the mutants on the source problems
+    make_commands(DomainFilepath, ProblemFilepath, Output, PlannersCommands, Commands), % involves running the mutants on the source problems
     load_nodes_or_generate(CacheName, Nodes),
     atom_concat(Tmp, '.txt', CacheName),
-    atom_concat(Tmp, '.csv', CsvFilename),
+    % Output ends with '.txt' means the .csv filename is based on CacheName, otherwise Output is used to create the .csv filename as well as the tmp .txt and .pddl files
+    (atom_concat(_, '.txt', Output) -> (atom_concat(Tmp, '.csv', CsvFilename), OutputFilename = Output) ; (atom_concat(Output, '.csv', CsvFilename), atom_concat(Output, '.txt', OutputFilename))),
     set_nodes_csv_result(CsvFilename),
     test_mutants(DomainFilepath, Problem, 0, Nodes, Commands, OutputFilename, CsvFilename, MutantExecutionTimesList),
     (
