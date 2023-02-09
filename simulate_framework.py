@@ -31,6 +31,16 @@ PROBLEM_REGEX = re.compile('(.+)(\d\d)')
 GENERATORS_LATEX = {
     # static result keys
     'mutant': '$MorphinPlan$',
+    'bfs': 'bfs\_det',#'$NoSelect$',
+    'random': 'bfs\_ran',# '$RandomSelect$',
+    'random_std': '$S^{std}_{random}$',
+    # dynamic result keys
+    'walks': 'ran\_wal',#'$RandomWalks$', # main_fd_results
+    'walks_std': '$R^{std}_{walks}$' # main_fd_results
+}
+GENERATORS_CHART = {
+    # static result keys
+    'mutant': '$MorphinPlan$',
     'bfs': 'bfs_det',#'$NoSelect$',
     'random': 'bfs_ran',# '$RandomSelect$',
     'random_std': '$S^{std}_{random}$',
@@ -351,17 +361,24 @@ def regroup_select_results(n: int) -> None:
     if os.path.exists(fp):
         print(f'{fp} already exists. Aborted.')
     else:
-        df = pd.concat([pd.read_csv(f'data/{f}') for f in os.listdir('data') if f.startswith('selection_generators') and f.endswith(f'{n}.csv')], ignore_index=True)
+        df_filepaths = [f'data/{f}' for f in os.listdir('data') if f.startswith('selection_generators') and f.endswith(f'{n}.csv')]
+        df = pd.concat([pd.read_csv(df_fp) for df_fp in df_filepaths], ignore_index=True)
         df.to_csv(fp, index=0)
-
+        for df_filepath in df_filepaths:
+            if os.path.exists(df_filepath):
+                os.remove(df_filepath)
 
 def regroup_random_select_results(n: int) -> None:
     fp = f'data/selection_random_{n}.csv'
     if os.path.exists(fp):
         print(f'{fp} already exists. Aborted.')
     else:
-        df = pd.concat([pd.read_csv(f'data/{f}') for f in os.listdir('data') if f.startswith('selection_random') and f.endswith(f'{n}.csv')], ignore_index=True)
+        df_filepaths = [f'data/{f}' for f in os.listdir('data') if f.startswith('selection_random') and f.endswith(f'{n}.csv')]
+        df = pd.concat([pd.read_csv(df_fp) for df_fp in df_filepaths], ignore_index=True)
         df.to_csv(fp, index=0)
+        for df_filepath in df_filepaths:
+            if os.path.exists(df_filepath):
+                os.remove(df_filepath)
 
 
 def regroup_results(n: int) -> None:
@@ -468,7 +485,7 @@ def merge_n_scaling_result_dataframe_latex(filepaths: list[str], filename: str) 
         for g in generators:
             y = [df_mean.at[n, g] for n in n_values]
             err = [df_std.at[n, g] for n in n_values]
-            ax.plot(x, [df_mean.at[n, g] for n in n_values], label=GENERATORS_LATEX[g])
+            ax.plot(x, [df_mean.at[n, g] for n in n_values], label=GENERATORS_CHART[g])
             ax.fill_between(x, (np.array(y) - np.array(err)).tolist(), (np.array(y) + np.array(err)).tolist(), alpha=0.2)
         ax.set_xticks(x)
         ax.set_xlim(1, len(n_values))
@@ -603,7 +620,7 @@ def plot_mutation_coverage(df: pd.DataFrame, filename: str) -> None:
     for i in range(len(gens)):
         generator = gens[i]
         x_offset = (i - len(gens) / 2) * bar_width + bar_width / 2
-        ax.bar(x + x_offset, scores[generator], width=bar_width, label=GENERATORS_LATEX[generator])
+        ax.bar(x + x_offset, scores[generator], width=bar_width, label=GENERATORS_CHART[generator])
     ax.set_xticks(x)
     ax.set_xticklabels(relevant_problems, rotation=30)
     ax.set_ylabel('Detection coverage [%]')
@@ -734,7 +751,7 @@ def plot_overall_performance(df: pd.DataFrame, filename: str) -> None:
     _, ax = plt.subplots()
     bar = ax.bar(generators, scores, yerr=yerr)
     ax.bar_label(bar)
-    ax.set_xticks(ticks=np.arange(len(generators)), labels=[GENERATORS_LATEX[g] for g in generators])
+    ax.set_xticks(ticks=np.arange(len(generators)), labels=[GENERATORS_CHART[g] for g in generators])
     ax.set_ylabel('Rate of fault-revealing test cases [%]')
     plt.savefig(filename, dpi=200)
 
@@ -813,7 +830,7 @@ def n_scaling_mutation_coverage(df: pd.DataFrame, n_max: int, filename: str=None
             gens = list(d.keys())
             for i in range(len(gens)):
                 generator = gens[i]
-                ax.plot(x, d[generator], label=GENERATORS_LATEX[generator])
+                ax.plot(x, d[generator], label=GENERATORS_CHART[generator])
             ax.set_xlabel('$N_{max}$')
             ax.set_ylabel('Average detection coverage [%]')
             ax.set_xticks(x)
