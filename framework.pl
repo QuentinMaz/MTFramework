@@ -21,22 +21,51 @@
 % /!\ NO SAFE PREDICATE
 remove_files([]).
 remove_files([Filename|T]) :-
-    process_create(path(powershell), ['-Command', 'rm', Filename], [wait(_ExitStatus)]),
+    (
+        prolog_flag(platform_data, platform(_, windows, _)) ->
+        process_create(path(powershell), ['-Command', 'rm', Filename], [wait(_ExitStatus)])
+    ;
+        atom_concat('rm ', Filename, Command),
+        process_create(path(sh), ['-c', Command], [wait(_ExitStatus)])
+    ),
     remove_files(T).
 
 remove_files_from_txt_file(Filepath) :-
     atom_concat(Filename, '.txt', Filepath),
     atom_concat(Filename, '*', Pattern),
-    process_create(path(powershell), ['-Command', 'rm', Pattern], [wait(_ExitStatus)]).
+    (
+        prolog_flag(platform_data, platform(_, windows, _)) ->
+        process_create(path(powershell), ['-Command', 'rm', Pattern], [wait(_ExitStatus)])
+    ;
+        atom_concat('rm ', Pattern, Command),
+        process_create(path(sh), ['-c', Command], [wait(_ExitStatus)])
+    ).
 
 remove_tmp_files :-
-    process_create(path(powershell), ['-Command', 'rm', 'tmp/*.txt'], [wait(_ExitStatus)]),
-    process_create(path(powershell), ['-Command', 'rm', 'tmp/*.pddl'], [wait(_ExitStatus)]).
+    (
+        prolog_flag(platform_data, platform(_, windows, _)) ->
+        process_create(path(powershell), ['-Command', 'rm', 'tmp/*.txt'], [wait(_ExitStatus)]),
+        process_create(path(powershell), ['-Command', 'rm', 'tmp/*.pddl'], [wait(_ExitStatus)])
+    ;
+        process_create(path(sh), ['-c', 'rm tmp/*.txt'], [wait(_ExitStatus)]),
+        process_create(path(sh), ['-c', 'rm tmp/*.pddl'], [wait(_ExitStatus)])
+    ).
 
 %% run_planner_command(+Command, +DomainFilepath, +ProblemFilepath, +ResultFilename, -ExitStatus, -ExecutionTime).
 run_planner_command(Command, DomainFilepath, ProblemFilepath, ResultFilename, ExitStatus, ExecutionTime) :-
     statistics(walltime, [StartTime, _]),
-    process_create(path(powershell), ['-Command', Command, DomainFilepath, ProblemFilepath, ResultFilename], [wait(ExitStatus)]),
+    (
+        prolog_flag(platform_data, platform(_, windows, _)) ->
+        process_create(path(powershell), ['-Command', Command, DomainFilepath, ProblemFilepath, ResultFilename], [wait(ExitStatus)])
+    ;
+        atom_concat(Command, ' ', Tmp1),
+        atom_concat(Tmp1, DomainFilepath, Tmp2),
+        atom_concat(Tmp2, ' ', Tmp3),
+        atom_concat(Tmp3, ProblemFilepath, Tmp4),
+        atom_concat(Tmp4, ' ', Tmp5),
+        atom_concat(Tmp5, ResultFilename, Tmp6),
+        process_create(path(sh), ['-c', Tmp6], [wait(ExitStatus)])
+    ),
     statistics(walltime, [CurrentTime, _]),
     ExecutionTime is (CurrentTime - StartTime) / 1000.
 
