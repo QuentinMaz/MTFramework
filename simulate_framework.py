@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import json
 import multiprocessing
 import random
+import platform
 
 ######################################################################################################################################################
 ############################################################## SETTING ###############################################################################
@@ -51,8 +52,8 @@ GENERATORS_CHART = {
 DETERMINISTIC_STATIC_GENERATORS = ['bfs'] # ['min_dist_i', 'min_dist_g', 'max_dist_i', 'max_dist_g', 'bfs', 'mutant', 'select_mutants_killers']
 NB_RANDOM_WALKS_REPETITIONS = 3
 NB_RANDOM_REPETITIONS = 10
-NB_TESTS = 10
-NB_THREADS = 19
+NB_TESTS = 60
+NB_THREADS = 20
 NO_DIGIT_REGEX = re.compile('(\D+)')
 SASAK_TIMEOUT = 120000
 
@@ -67,7 +68,7 @@ f.close()
 
 # https://stackoverflow.com/a/20929881
 def is_float(element: any) -> bool:
-    if element is None: 
+    if element is None:
         return False
     try:
         float(element)
@@ -120,6 +121,8 @@ def cache_problem(domain_filename: str, problem_filename: str, output_filename: 
     command = f'main.exe --test {domain_filename} {problem_filename} {output_filename} {" ".join(planners_commands)}'
     execution_times = [0.0, 0.0, 0.0]
     try:
+        if platform.system() != 'Windows':
+            command = './' + command
         p = subprocess.run(command, shell=True, capture_output=True)
         exec_times = [float(l) for l in p.stdout.decode().splitlines() if is_float(l)]
         execution_times = [exec_times[0], np.sum(exec_times[1:]), exec_times[0] - np.sum(exec_times[1:])]
@@ -148,7 +151,10 @@ def run_framework_prolog_planner(domain_filename: str, problem_filename: str, co
     planner_command = f'"planners/prolog_planner.exe mutated_astar-{configuration[0]} {HEURISTICS[configuration[1]]}"'
     command = f'main.exe {domain_filename} {problem_filename} {planner_command} {nb_tests} {result_filename} {output_filename} {" ".join(generators)}'
     try:
-        subprocess.run(command, stdout=subprocess.DEVNULL)
+        if platform.system() != 'Windows':
+            subprocess.run(['./' + command], shell=True, stdout=subprocess.DEVNULL)
+        else:
+            subprocess.run(command, stdout=subprocess.DEVNULL)
     except:
         print(f'{configuration[0]}_{configuration[1]} error with args: {domain_filename} {problem_filename} {nb_tests} {generators}.')
 
@@ -160,7 +166,10 @@ def run_framework_fd_planner(domain_filename: str, problem_filename: str, config
     planner_command = f'"python planners/fd_planner.py {configuration[0]} {configuration[1]}"'
     command = f'main.exe {domain_filename} {problem_filename} {planner_command} {nb_tests} {result_filename} {output_filename} {" ".join(generators)}'
     try:
-        subprocess.run(command, stdout=subprocess.DEVNULL)
+        if platform.system() != 'Windows':
+            subprocess.run(['./' + command], shell=True, stdout=subprocess.DEVNULL)
+        else:
+            subprocess.run(command, stdout=subprocess.DEVNULL)
     except:
         print(f'{configuration[0]}_{configuration[1]}  error with args: {domain_filename} {problem_filename} {nb_tests} {generators}.')
 
@@ -173,7 +182,10 @@ def run_framework_sasak_planner(domain_filename: str, problem_filename: str, con
     planner_command = f'"planners/{configuration[0]}/{configuration[1]}_{configuration[2]}.exe {SASAK_TIMEOUT}"'
     command = f'main.exe {domain_filename} {problem_filename} {planner_command} {nb_tests} {result_filename} {output_filename} {" ".join(generators)}'
     try:
-        subprocess.run(command, stdout=subprocess.DEVNULL)
+        if platform.system() != 'Windows':
+            subprocess.run(['./' + command], shell=True, stdout=subprocess.DEVNULL)
+        else:
+            subprocess.run(command, stdout=subprocess.DEVNULL)
     except:
         print(f'error when running main.exe on {planner_command} with args: {domain_filename} {problem_filename} {nb_tests} {generators}.')
 
@@ -186,7 +198,10 @@ def simulate_framework(domain_filename: str, problem_filename: str, nb_tests: in
     # print(command)
     indexes = []
     try:
-        p = subprocess.run(command, capture_output=True)
+        if platform.system() != 'Windows':
+            p = subprocess.run(['./' + command], shell=True, capture_output=True)
+        else:
+            p = subprocess.run(command, capture_output=True)
         # does not consider the last lines as it is supposed to be the execution time
         indexes = [int(i) for i in p.stdout.decode().splitlines()[:-1]]
     except:
@@ -447,15 +462,15 @@ def merge_result_dataframe_latex(filepaths: list[str], filename: str) -> None:
         data[problem] = []
         for c in gens1:
             cell = f'{df_mean.at[problem, c]:.1f}$\pm${df_std.at[problem, c]:.1f}'
-            data[problem].append(cell if df_mean.at[problem, c] != max_value else f'\textbf{{{cell}}}')
+            data[problem].append(cell if df_mean.at[problem, c] != max_value else f'\\textbf{{{cell}}}')
         for c in gens2:
             cell = f'({df_mean.at[problem, c]:.1f}$\pm${df_mean.at[problem, c + "_std"]:.1f})$\pm${df_std.at[problem, c]:.1f}'
-            data[problem].append(cell if df_mean.at[problem, c] != max_value else f'\textbf{{{cell}}}')
+            data[problem].append(cell if df_mean.at[problem, c] != max_value else f'\\textbf{{{cell}}}')
 
     # for the mean line, each cell is the average of the previous means with the related standard deviation
     problem = 'mean'
     max_value = max(df_mean.loc[problem])
-    data['mean'] = [f'{df_mean.at[problem, c]:.1f}$\pm${np.std(df_mean[c].head(len(problems))):.1f}' if df_mean.at[problem, c] != max_value else f'\textbf{{{df_mean.at[problem, c]:.1f}$\pm${np.std(df_mean[c].head(len(problems))):.1f}}}' for c in columns]
+    data['mean'] = [f'{df_mean.at[problem, c]:.1f}$\pm${np.std(df_mean[c].head(len(problems))):.1f}' if df_mean.at[problem, c] != max_value else f'\\textbf{{{df_mean.at[problem, c]:.1f}$\pm${np.std(df_mean[c].head(len(problems))):.1f}}}' for c in columns]
 
     df = pd.DataFrame.from_dict(data, orient='index', columns=[GENERATORS_LATEX[c] for c in columns])
     df.to_latex(filename, escape=False)
@@ -714,50 +729,252 @@ def dataframe_mutation_coverage(df: pd.DataFrame, filename: str=None) -> pd.Data
 ############################################################## STATE SELECTION EFFICIENCY ############################################################
 
 
-def plot_overall_performance(df: pd.DataFrame, filename: str) -> None:
+def plot_failure_rates(data: dict[str, tuple[list, list]], n_max: int):
     """
-    Saves a chart that describes the efficiency of each solution by reporting the percentage of successful follow-up test cases.
-    It works well with results to average.
+    Plots the failure rates for a given @n_max value.
+    The data is a dictonary whose keys are the methods and values tuples of two lists:
+    - The bars' heights are defined with the first list.
+    - Their errors are defined w.r.t. the second list.
+    The values of the input @n_max are got back with the index @n_max - 1.
+    It returns the matplotlib Figure and its ax.
     """
-    # results to average detection
-    results_to_average = False
-    for g in df['generator'].unique().tolist():
-        if g[-1].isdigit():
-            results_to_average = True
-            break
-    generators = [g for g in df['generator'].unique().tolist() if not g[-1].isdigit()]
-    if results_to_average:
-        generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in df['generator'].unique().tolist() if g[-1].isdigit()]))
-        nb_repetitions = {g: len([x for x in df['generator'].unique().tolist() if x.startswith(g) and x[-1].isdigit()]) for g in generators_to_average}
-
+    generators = list(data.keys())
     scores = []
     yerr = []
     for g in generators:
-        g_df = df.loc[df.generator==g]
-        g_scores = [100 * len(g_df.loc[(g_df.failure==1) & (g_df.problem==p)]) / len(g_df.loc[g_df.problem==p]) if not g_df.loc[g_df.problem==p].empty else 0 for p in PROBLEMS]
-        scores.append(np.mean(g_scores))
-        yerr.append(np.std(g_scores))
-    if results_to_average:
-        for g in generators_to_average:
-            nb_repetition = nb_repetitions[g]
-            g_scores = []
-            for p in PROBLEMS:
-                p_df = df.loc[df.problem==p]
-                i_scores = [100 * len(p_df.loc[(p_df.generator==f'{g}{i}') & (p_df.failure==1)]) / len(p_df.loc[p_df.generator==f'{g}{i}']) if not p_df.loc[p_df.generator==f'{g}{i}'].empty else 0 for i in range(nb_repetition)]
-                g_scores.append(np.mean(i_scores))
-            scores.append(np.mean(g_scores))
-            yerr.append(np.std(g_scores))
-            generators.append(g)
-    _, ax = plt.subplots()
+        scores.append(data[g][0][n_max - 1])
+        yerr.append(data[g][1][n_max - 1])
+    fig, ax = plt.subplots()
     bar = ax.bar(generators, scores, yerr=yerr)
     ax.bar_label(bar)
     ax.set_xticks(ticks=np.arange(len(generators)), labels=[GENERATORS_CHART[g] for g in generators])
     ax.set_ylabel('Rate of fault-revealing test cases [%]')
-    plt.savefig(filename, dpi=200)
+    fig.tight_layout()
+    return fig, ax
+
+
+def get_failure_rates(df: pd.DataFrame) -> dict[str, list[list[int]]]:
+    """
+    Returns a dictionnary whose keys are the generators and values are lists of the failure flags.
+    """
+    gens = df['generator'].unique().tolist()
+    put = df['planner'].unique().tolist()
+    problems = PROBLEMS
+
+    # num_put = len(put)
+    # print(f'{num_put} PUT found.')
+    failure_per_gen = {}
+    for g in gens:
+        # test case result per "test suite"
+        scores = []
+        g_df = df.loc[df.generator==g]
+        for p in problems:
+            # should have n_max * num_put results
+            # but we can have less because of time out.
+            # how then compute the scaling over N?
+            p_df = g_df.loc[g_df.problem==p]
+            for planner in put:
+                tmp_df = p_df.loc[p_df.planner==planner]
+
+                scores.append(tmp_df['failure'].tolist())
+        failure_per_gen[g] = scores
+
+    return failure_per_gen
+
+
+def compute_failure_rates(test_suite_results: dict[str, list[list[int]]], n_max: int) -> dict[str, list[int]]:
+    """
+    Computes the average rate of failed test cases for a given @n_max of each generator.
+    """
+    def acc(l: list):
+        acc_list = []
+        counter = 0
+        for e in l:
+            counter += int(e)
+            acc_list.append(e)
+        return acc_list
+
+    avg_rates = {}
+
+    # results to average detection
+    results_to_average = False
+
+    generators = list(test_suite_results.keys())
+    for g in generators:
+        if g[-1].isdigit():
+            results_to_average = True
+            break
+    if results_to_average:
+        generators_to_average = list(set([NO_DIGIT_REGEX.match(g).group(1) for g in generators if g[-1].isdigit()]))
+        nb_repetitions = {g: len([x for x in generators if x.startswith(g) and x[-1].isdigit()]) for g in generators_to_average}
+
+    generators = [g for g in generators if not g[-1].isdigit()]
+    # print('generators:', generators)
+    # print('generators to average:', generators_to_average)
+
+    for g in generators:
+        l = test_suite_results[g]
+        scores = []
+        # iterates over the failure flags
+        for t in l:
+            # accumulates the number of failed tests
+            tmp_score = acc(t)
+            if len(tmp_score) < n_max:
+                # extends the results to n_max if needed
+                max_score = tmp_score[-1]
+                score = tmp_score + [max_score for _ in range(n_max - len(tmp_score))]
+            elif len(tmp_score) > n_max:
+                score = tmp_score[:n_max]
+            else:
+                score = t
+            assert len(score)==n_max
+            scores.append(score)
+        avg_rates[g] = 100.0 * np.mean(scores, axis=0)
+    if results_to_average:
+        for g in generators_to_average:
+            nb_repetition = nb_repetitions[g]
+            repetition_scores = []
+            for i in range(nb_repetition):
+                scores = []
+                sub_l = test_suite_results[f'{g}{i}']
+                for t in sub_l:
+                    # accumulates the number of failed tests
+                    tmp_score = acc(t)
+                    if len(tmp_score) < n_max:
+                        # extends the results to n_max if needed
+                        max_score = tmp_score[-1]
+                        score = tmp_score + [max_score for _ in range(n_max - len(tmp_score))]
+                    elif len(tmp_score) > n_max:
+                        score = tmp_score[:n_max]
+                    else:
+                        score = t
+                    assert len(score)==n_max, f'{n_max} and {len(score)}'
+                    scores.append(score)
+                repetition_scores.append(100.0 * np.mean(scores, axis=0))
+            avg_rates[g] = np.mean(repetition_scores, axis=0)
+
+    return avg_rates
+
+
+def average_failure_rates(dict_list: list[dict[str, list[int]]]) -> dict[str, tuple[list, list]]:
+    result_d = {}
+    keys = list(dict_list[0].keys())
+    for k in keys:
+        scores = [d[k] for d in dict_list]
+        tmp = len(scores[0])
+        assert np.all(len(l)==tmp for l in scores[1:])
+        result_d[k] = (np.mean(scores, axis=0), np.std(scores, axis=0))
+    return result_d
+
+
+def plot_single_n_scaling_result(data: dict[str, tuple[list, list]], n_max: int, filename: str, generators: list[str] = None) -> None:
+    """
+    Plots a single n scaling analysis.
+    """
+    if generators is None:
+        generators = list(data.keys())
+
+    y_list = []
+    yerr_list = []
+    for k in generators:
+        g_data = data[k]
+        assert len(g_data)==2
+        y_list.append(g_data[0])
+        yerr_list.append(g_data[1])
+
+    fig, ax = plt.subplots()
+    for g, y, yerr in zip(generators, y_list, yerr_list):
+        x = range(1, 1 + len(y))
+        label = GENERATORS_CHART.get(g, g)
+        ax.plot(x, y, label=label)
+        ax.fill_between(x, (np.array(y) - np.array(yerr)).tolist(), (np.array(y) + np.array(yerr)).tolist(), alpha=0.2)
+    ax.set_xlabel('$N_{max}$')
+    ax.set_ylabel('Rate of fault-revealing test cases [%]')
+    # x = range(1, 1 + len(y), 10)
+    # ax.set_xticks(x)
+    ax.set_xlim(1, n_max)
+    ax.grid(True)
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.1), ncol=len(generators), fancybox=True, shadow=True)
+    fig.tight_layout()
+    fig.savefig(filename, dpi=200)
+    return fig, ax
+
+
+
+def average_mutation_scores(files: str) -> dict[str, tuple[list, list]]:
+    """
+    Returns the average mutation scores stored in the .csv @files as a dictionary.
+    """
+    df_list = [pd.read_csv(f, index_col='N') for f in files]
+    assert len(df_list) > 0
+    generators = df_list[0].columns.tolist()
+    # for f, df in zip(files, df_list):
+    #     if not generators==df.columns.tolist():
+    #         print(f)
+    assert np.all([generators==df.columns.tolist() for df in df_list])
+    scores = {g: [] for g in generators}
+    for df in df_list:
+        for g in generators:
+            scores[g].append(df[g].tolist())
+    for g in generators:
+        v = scores[g]
+        new_v = (np.mean(v, axis=0), np.std(v, axis=0))
+        scores[g] = new_v
+    return scores
+
+
+
+def plot_n_scaling_results(
+        failure_rates: dict[str, tuple[list, list]],
+        mutation_scores: dict[str, tuple[list, list]],
+        n_max: int,
+        filename: str
+    ) -> None:
+    """
+    Plots the analysis of the failure rates and mutation scores in 2 plots.
+    """
+    def plot_to_ax(ax, data: tuple[list, list]):
+        y, yerr = data
+        x = range(1, 1 + len(y))
+        label = GENERATORS_CHART.get(g, g)
+        ax.plot(x, y, label=label)
+        ax.fill_between(x, (np.array(y) - np.array(yerr)).tolist(), (np.array(y) + np.array(yerr)).tolist(), alpha=0.2)
+
+
+    generators = list(failure_rates.keys())
+    tmp = list(mutation_scores.keys())
+    tmp.sort()
+    generators.sort()
+    assert generators==tmp
+
+    fig, axs = plt.subplots(ncols=2, figsize=(10, 5))
+
+
+    for g in generators:
+        plot_to_ax(axs[0], failure_rates[g])
+        plot_to_ax(axs[1], mutation_scores[g])
+
+    for ax in axs.flat:
+        ax.set_xlabel('$N_{max}$')
+        ax.grid(True)
+        ax.set_xlim(1, n_max)
+    axs[0].set_ylabel('Rate of fault-revealing test cases [%]')
+    axs[1].set_ylabel('Average detection coverage [%]')
+    fig.tight_layout()
+    axs[0].legend(
+        loc='upper center',
+        bbox_to_anchor=(1.075, 1.1),
+        ncol=len(generators),
+        fancybox=True,
+        shadow=True
+        )
+    fig.subplots_adjust(top=0.925)
+    fig.savefig(filename, dpi=200)
+    return fig, axs
 
 
 ######################################################################################################################################################
-############################################################## N SCALING #############################################################################
+############################################################## MUTATION SCORE #############################################################################
 
 
 def n_scaling_mutation_coverage(df: pd.DataFrame, n_max: int, filename: str=None) -> pd.DataFrame:
@@ -898,7 +1115,7 @@ def dataframe_detection_results(df: pd.DataFrame, filename: str=None) -> pd.Data
             regrouped_scores[name] = fd_planner_score
 
     result_df = pd.DataFrame(data=regrouped_scores, index=problems)
-    
+
     if long_column != False:
         column_to_move = result_df.pop(long_column)
         result_df.insert(len(result_df.columns), long_column, column_to_move, allow_duplicates=True)
@@ -962,18 +1179,18 @@ def main_test_mutants_selection_impact():
         random_walks_result_df.to_csv(f'results/random_walks_{i}_{validation_size}_{selection_size}.csv')
 
         result_df = pd.concat([simulation_result_df, random_walks_result_df], ignore_index=True)
-        dataframe_mutation_coverage(result_df, f'results/coverage_{i}_{validation_size}_{selection_size}.csv')
-        n_scaling_mutation_coverage(result_df, 10,  f'results/n_scaling_mutation_coverage_{i}_{validation_size}_{selection_size}.csv')
+        # dataframe_mutation_coverage(result_df, f'results/coverage_{i}_{validation_size}_{selection_size}.csv')
+        n_scaling_mutation_coverage(result_df, n,  f'results/n_scaling_mutation_coverage_{i}_{validation_size}_{selection_size}.csv')
         result_df.to_csv( f'results/result_{i}_{validation_size}_{selection_size}.csv', index=0)
 
-    coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('coverage') and f.endswith('.csv')]
-    n_scaling_mutation_coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('n_scaling_mutation_coverage') and f.endswith('.csv')]
+    # coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('coverage') and f.endswith('.csv')]
+    # n_scaling_mutation_coverage_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('n_scaling_mutation_coverage') and f.endswith('.csv')]
     result_fps = [f'results/{f}' for f in os.listdir('results') if f.startswith('result') and f.endswith('.csv')]
-    merge_result_dataframe_latex(coverage_fps, f'results/coverage_{nb_experiments}_{n}.tex')
-    merge_n_scaling_result_dataframe_latex(n_scaling_mutation_coverage_fps, f'results/n_scaling_mutation_coverage_{nb_experiments}_{n}.png')
+    # merge_result_dataframe_latex(coverage_fps, f'results/coverage_{nb_experiments}_{n}.tex')
+    # merge_n_scaling_result_dataframe_latex(n_scaling_mutation_coverage_fps, f'results/n_scaling_mutation_coverage_{nb_experiments}_{n}.png')
     final_result_df = pd.concat([pd.read_csv(result_fp) for result_fp in result_fps], ignore_index=True)
     final_result_df.to_csv(f'results/final_results_{nb_experiments}_{n}.csv', index=0)
-    plot_overall_performance(final_result_df, f'results/overall_efficiency_{nb_experiments}_{n}.png')
+    # plot_overall_performance(final_result_df, f'results/overall_efficiency_{nb_experiments}_{n}.png')
 
 
 def main_build_deterministic_results():
@@ -983,7 +1200,7 @@ def main_build_deterministic_results():
     my_args = [(problem, CONFIGURATIONS, NB_TESTS) for problem in PROBLEMS]
     print(f'{len(my_args)} executions are about to be launched.')
     pool = multiprocessing.Pool(processes=NB_THREADS)
-    pool.starmap(result_problem_configs_selections, my_args, chunksize=3)
+    pool.starmap(result_problem_configs_selections, my_args, chunksize=2)
     regroup_select_results(NB_TESTS)
 
 
@@ -995,7 +1212,7 @@ def main_build_random_results():
     my_args = [(problem, CONFIGURATIONS, NB_TESTS) for problem in PROBLEMS]
     print(f'{len(my_args)} executions are about to be launched.')
     pool = multiprocessing.Pool(processes=NB_THREADS)
-    pool.starmap(result_problem_configs_random, my_args, chunksize=3)
+    pool.starmap(result_problem_configs_random, my_args, chunksize=2)
     regroup_random_select_results(NB_TESTS)
 
 
@@ -1009,7 +1226,7 @@ def main_second_experiment():
         - Optimal settings of the FastDownward planning system.
         - Not necessarily optimal settings of the FastDownward planning system.
 
-    Note that revealing optimal faults among the results of the non-optimal FD planners is expected (they are tested to evaluate MorphinPlan's approach). 
+    Note that revealing optimal faults among the results of the non-optimal FD planners is expected (they are tested to evaluate MorphinPlan's approach).
     """
     generators = {
         'select_mutants_killers': 'mutant'
@@ -1031,7 +1248,7 @@ def main_second_experiment():
     # executes MorphinPlan
     my_fd_args = get_arguments(fd_configurations, PROBLEMS, NB_TESTS, list(generators.keys()))
     print(f'{len(my_fd_args)} executions are about to be launched.')
-    pool.starmap(run_framework_fd_planner, my_fd_args, chunksize=3)
+    pool.starmap(run_framework_fd_planner, my_fd_args, chunksize=2)
 
     # regroups the results and cleans the result subfiles
     fd_result_fps = list(map(lambda x: x[4], my_fd_args))
@@ -1050,7 +1267,7 @@ def main_second_experiment():
         sasak_configurations = [(version, 'fastar', 'h0'), (version, 'fastar', 'hmax')]
         my_sasak_args = get_sasak_arguments(sasak_configurations, problems, NB_TESTS, list(generators.keys()))
         print(f'{len(my_sasak_args)} executions are about to be launched.')
-        pool.starmap(run_framework_sasak_planner, my_sasak_args, chunksize=3 if len(my_sasak_args) >= NB_THREADS else 1)
+        pool.starmap(run_framework_sasak_planner, my_sasak_args, chunksize=2 if len(my_sasak_args) >= NB_THREADS else 1)
         sasak_result_fps = list(map(lambda x: x[4], my_sasak_args))
         sasak_result_df = regroup_framework_result_dataframes(sasak_result_fps)
         sasak_result_df.replace(to_replace=generators, inplace=True)
@@ -1066,8 +1283,8 @@ def main_second_experiment():
     result_df.to_csv(f'results/second_experiment_results_{NB_TESTS}.csv', index=0)
     dataframe_detection_results(result_df, f'results/second_experiment_results_{NB_TESTS}.tex')
     return result_df
-    
-    
+
+
 def main_build_cache():
     args = []
     for problem in PROBLEMS:
@@ -1088,19 +1305,163 @@ def main_build_cache():
             os.remove(tmp_file)
 
 
+def store_dict(filepath: str, result_dict: dict[str, tuple[np.ndarray, np.ndarray]]):
+    '''Stores a dictionary of results at the given @filename.'''
+    dict_to_store = {}
+    for k, v in result_dict.items():
+        assert isinstance(v, tuple)
+        assert np.all([isinstance(t, np.ndarray) for t in v])
+        new_v = [t.tolist() for t in v]
+        dict_to_store[k] = new_v
+
+    filename = filepath.split('.json')[0]
+    with open(f'{filename}.json', 'w') as f:
+        f.write(json.dumps(dict_to_store))
+
+
+def load_dict(filepath: str) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    '''
+    Loads stored results.
+    It return an empty dictionnary if the dumped dictionnary is malformed.
+    '''
+    filepath = filepath.split('.')[0] + '.json'
+    assert os.path.exists(filepath), filepath
+    try:
+        with open(filepath, 'r') as f:
+            d = json.load(f)
+    except:
+        d = {}
+    return d
+
+
+def approximate_time_executions(result_files: list[str], n: int):
+    """
+    Approximates the execution times of the methods based on the number of (planner) executions and average (planning) time.
+    We consider that:
+    - bfs_det only needs to generate @n test cases.
+    - bfs_ran needs to generate 500 test cases (since the @n test cases are sampled from them).
+    - wal_ran needs to generate @n test cases.
+    - MorphinPlan needs to score the 500 test cases from the BFS state exploration, thus needing 500 * num_scoring_planners.
+    The execution times are then astimated as these test case numbers times num_put times the average put execution time.
+    """
+
+    splits = [f.split('.')[0].split('_') for f in files]
+    # number of PUT per file
+    validation_sizes = [int(s[2]) for s in splits]
+    # total
+    num_put_executions = sum(validation_sizes)
+    # number of mutants used by MorphinPlan per file
+    selection_sizes = [int(s[3]) for s in splits]
+    # total number of planner calls of MorphinPlan
+    num_planner_calls = np.dot(validation_sizes, selection_sizes)
+
+    df = pd.concat([pd.read_csv(f) for f in result_files], ignore_index=True)
+    avg_test_case_exec_time = df.loc[df.error==0]['execution_time(sec)'].mean()
+
+    # "rough" estimation of the number of test cases solved
+    generator_costs = {
+        'mutant': 500 * n,
+        'bfs': n,
+        'random': 500 * n,
+        'walks': n
+    }
+
+    execution_times = {}
+    for k, v in generator_costs.items():
+        if k=='mutant':
+            c = num_planner_calls * avg_test_case_exec_time
+        else:
+            c = num_put_executions * avg_test_case_exec_time
+        execution_times[k] = v * c
+
+
+    return execution_times
+
+
+def reduce_result_to_n(df: pd.DataFrame, n: int = 4) -> pd.DataFrame:
+    # gens = df['generator'].unique().tolist()
+    put = df['planner'].unique().tolist()
+    # problems = df['problem'].unique().tolist()
+
+    df_list = []
+    for planner in put:
+        planner_df = df.loc[df.planner==planner]
+        problems = planner_df['problem'].unique().tolist()
+
+        for problem in problems:
+            pp_df = planner_df.loc[planner_df.problem==problem]
+            generators = pp_df['generator'].unique().tolist()
+
+            for gen in generators:
+
+                tmp_df = pp_df.loc[pp_df.generator==gen] # type: pd.DataFrame
+                if tmp_df.empty:
+                    print("No result for {} {} {}.".format(planner, problem, gen))
+                else:
+                    df_to_add = tmp_df.head(n)
+                    # print("Found {} results for {} {} {}.".format(len(df_to_add), planner, problem, gen))
+                    df_list.append(df_to_add)
+
+    return pd.concat(df_list, ignore_index=True)
+
+
 # exec(open('simulate_framework.py').read())
 if __name__ == '__main__':
+    avg_failure_rates_filename = 'n_scaling_effiency'
+    n = 4
+
     print(f'number of problems: {len(PROBLEMS)}')
     print(f'number of configurations: {len(CONFIGURATIONS)}')
 
     # builds .csv file caches to avoid redundant mutants executions
-    main_build_cache()
+    # main_build_cache()
     # builds the results that can only have to be executed once
-    main_build_deterministic_results()
-    main_build_random_results()
+    # main_build_deterministic_results()
+    # main_build_random_results()
     # regroups them
-    regroup_results(NB_TESTS)
+    # regroup_results(NB_TESTS)
     # executes the first experiment
-    main_test_mutants_selection_impact()
+    # main_test_mutants_selection_impact()
+
+
+    # runtime approximation
+    # files = ['results/' + f for f in os.listdir('results/') if f.startswith('result_')]
+    # d = approximate_time_executions(files, 10)
+    # for k, v in d.items():
+    #     print(k, v / 60, 'min')
+
+    # Figures 3
+    files = ['results/' + f for f in os.listdir('results/') if f.startswith('result_')]
+
+    failure_rates = []
+    for f in files:
+        df = pd.read_csv(f)
+        raw_failure_rate_data = get_failure_rates(df)
+        failure_rates.append(compute_failure_rates(raw_failure_rate_data, NB_TESTS))
+    avg_failure_rates = average_failure_rates(failure_rates)
+
+    # exports the final scores (optional)
+    store_dict(avg_failure_rates_filename, avg_failure_rates)
+
+    fig, ax = plot_failure_rates(avg_failure_rates, n_max=n)
+    fig.savefig('figure3_{}.png'.format(n))
+
+    # Figure 4
+    files = ['results/' + f for f in os.listdir('results/') if f.startswith('n_scaling_mutation') and f.endswith('.csv')]
+    avg_mutation_scores = average_mutation_scores(files)
+    plot_n_scaling_results(avg_failure_rates, avg_mutation_scores, NB_TESTS, 'figure4_{}.png'.format(n))
+
+    # Table 4
+    files = ['results/' + f for f in os.listdir('results/') if f.startswith('result_')]
+    for i, f in enumerate(files):
+        df = pd.read_csv(f)
+        reduced_df = reduce_result_to_n(df, n=n)
+        reduced_df.to_csv("tmp/reduced_results_{}_{}.csv".format(n, i), index=0)
+        # computes the coverage
+        dataframe_mutation_coverage(reduced_df, 'tmp/coverage_{}_{}.csv'.format(n, i))
+    # averages the results to have the final figures for the table
+    coverage_fps = ["tmp/" + f for f in os.listdir('tmp') if f.startswith(f'coverage_{n}') and f.endswith('.csv')]
+    merge_result_dataframe_latex(coverage_fps, 'table_coverage_{}.tex'.format(n))
+
     # executes the second experiment
-    main_second_experiment()
+    # main_second_experiment()
