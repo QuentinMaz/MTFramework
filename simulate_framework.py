@@ -1245,8 +1245,9 @@ def main_second_experiment():
         fd_configurations.append(('astar', h))
     pool = multiprocessing.Pool(processes=NB_THREADS)
 
-    # executes MorphinPlan
-    my_fd_args = get_arguments(fd_configurations, PROBLEMS, NB_TESTS, list(generators.keys()))
+    # executes MorphinPlan on n=4 test cases
+    n = 4
+    my_fd_args = get_arguments(fd_configurations, PROBLEMS, n, list(generators.keys()))
     print(f'{len(my_fd_args)} executions are about to be launched.')
     pool.starmap(run_framework_fd_planner, my_fd_args, chunksize=2)
 
@@ -1255,7 +1256,7 @@ def main_second_experiment():
     fd_result_df = regroup_framework_result_dataframes(fd_result_fps)
     fd_result_df.replace(to_replace=generators, inplace=True)
     # saves the dataframe for safety
-    fd_result_df.to_csv(f'results/fd_results_{NB_TESTS}.csv', index=0)
+    fd_result_df.to_csv(f'results/fd_results_{n}.csv', index=0)
     for fd_result_fp in fd_result_fps:
         os.remove(fd_result_fp)
 
@@ -1265,23 +1266,23 @@ def main_second_experiment():
     sasak_result_dfs = []
     for version in versions:
         sasak_configurations = [(version, 'fastar', 'h0'), (version, 'fastar', 'hmax')]
-        my_sasak_args = get_sasak_arguments(sasak_configurations, problems, NB_TESTS, list(generators.keys()))
+        my_sasak_args = get_sasak_arguments(sasak_configurations, problems, n, list(generators.keys()))
         print(f'{len(my_sasak_args)} executions are about to be launched.')
         pool.starmap(run_framework_sasak_planner, my_sasak_args, chunksize=2 if len(my_sasak_args) >= NB_THREADS else 1)
         sasak_result_fps = list(map(lambda x: x[4], my_sasak_args))
         sasak_result_df = regroup_framework_result_dataframes(sasak_result_fps)
         sasak_result_df.replace(to_replace=generators, inplace=True)
         sasak_result_df.replace(to_replace={'fastar_h0': f'{version}_astar_h0', 'fastar_hmax': f'{version}_astar_hmax'}, inplace=True)
-        sasak_result_df.to_csv(f'results/{version}_sasak_results_{NB_TESTS}.csv', index=0)
+        sasak_result_df.to_csv(f'results/{version}_sasak_results_{n}.csv', index=0)
         for sasak_result_fp in sasak_result_fps:
             os.remove(sasak_result_fp)
         sasak_result_dfs.append(sasak_result_df)
     # saves the dataframe containing the results of all versions for safety
-    pd.concat(sasak_result_dfs, ignore_index=True).to_csv(f'results/sasak_results_{NB_TESTS}.csv', index=0)
+    pd.concat(sasak_result_dfs, ignore_index=True).to_csv(f'results/sasak_results_{n}.csv', index=0)
     # saves a dataframe with all the results
     result_df = pd.concat([*sasak_result_dfs, fd_result_df], ignore_index=True)
-    result_df.to_csv(f'results/second_experiment_results_{NB_TESTS}.csv', index=0)
-    dataframe_detection_results(result_df, f'results/second_experiment_results_{NB_TESTS}.tex')
+    result_df.to_csv(f'results/second_experiment_results_{n}.csv', index=0)
+    dataframe_detection_results(result_df, f'second_experiment_results_{n}.tex')
     return result_df
 
 
@@ -1414,14 +1415,14 @@ if __name__ == '__main__':
     print(f'number of configurations: {len(CONFIGURATIONS)}')
 
     # builds .csv file caches to avoid redundant mutants executions
-    # main_build_cache()
+    main_build_cache()
     # builds the results that can only have to be executed once
-    # main_build_deterministic_results()
-    # main_build_random_results()
+    main_build_deterministic_results()
+    main_build_random_results()
     # regroups them
-    # regroup_results(NB_TESTS)
+    regroup_results(NB_TESTS)
     # executes the first experiment
-    # main_test_mutants_selection_impact()
+    main_test_mutants_selection_impact()
 
 
     # runtime approximation
@@ -1464,4 +1465,4 @@ if __name__ == '__main__':
     merge_result_dataframe_latex(coverage_fps, 'table_coverage_{}.tex'.format(n))
 
     # executes the second experiment
-    # main_second_experiment()
+    main_second_experiment()
